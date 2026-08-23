@@ -257,19 +257,7 @@ export async function DELETE(request: NextRequest) {
 
     const supabase = createAdminClient();
 
-    // Verificar se tem usos
-    const { count } = await supabase
-      .from('cupom_usos')
-      .select('id', { count: 'exact', head: true })
-      .eq('cupom_id', id);
-
-    if (count && count > 0) {
-      return NextResponse.json(
-        { error: `Não é possível excluir: existem ${count} uso(s) vinculado(s). Desative o cupom em vez de excluí-lo.` },
-        { status: 409 }
-      );
-    }
-
+    // Excluir cupom — cupom_usos tem ON DELETE CASCADE no banco
     const { error } = await supabase.from('cupons').delete().eq('id', id);
     if (error) {
       console.error('[DELETE /api/admin-sistema/cupons] Erro:', error);
