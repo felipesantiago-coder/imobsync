@@ -23,6 +23,7 @@ import {
   Copy,
   Eye,
   EyeOff,
+  Calculator,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
@@ -32,6 +33,7 @@ import { createClient } from "@/lib/supabase/client";
 const AssinaturasTab = dynamic(() => import("./AssinaturasTab"), { ssr: false });
 const CuponsTab = dynamic(() => import("./CuponsTab"), { ssr: false });
 const CoordenadorEmpreendimentosModal = dynamic(() => import("@/components/CoordenadorEmpreendimentosModal"), { ssr: false });
+const SimuladorConfigModal = dynamic(() => import("./SimuladorConfigModal"), { ssr: false });
 
 type AdminTab = "empreendimentos" | "usuarios" | "assinaturas" | "cupons";
 
@@ -83,6 +85,9 @@ export default function AdminSistemaClient() {
   // Delete confirmation
   const [deleteTarget, setDeleteTarget] = useState<Empreendimento | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Simulador config
+  const [simuladorConfigTarget, setSimuladorConfigTarget] = useState<{ id: string; nome: string } | null>(null);
 
   // Upload states keyed by empreendimento id
   const [uploadingImage, setUploadingImage] = useState<Record<string, boolean>>({});
@@ -828,6 +833,15 @@ export default function AdminSistemaClient() {
                         Acessar Espelho
                       </a>
 
+                      {/* Configurar Simulador */}
+                      <button
+                        onClick={() => setSimuladorConfigTarget({ id: emp.id, nome: emp.nome })}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:border-amber-300 transition-all"
+                      >
+                        <Calculator className="w-3.5 h-3.5" />
+                        Simulador
+                      </button>
+
                       {/* Remover */}
                       <button
                         onClick={() => setDeleteTarget(emp)}
@@ -1428,6 +1442,17 @@ export default function AdminSistemaClient() {
           coordenadorNome={empModalUser.nome}
           onClose={() => setEmpModalUser(null)}
           onSaved={() => addToast("success", `Empreendimentos de ${empModalUser.nome} atualizados`)}
+        />
+      )}
+
+      {/* ── Simulador Config Modal ────────────────────────────────── */}
+      {simuladorConfigTarget && (
+        <SimuladorConfigModal
+          empreendimentoId={simuladorConfigTarget.id}
+          empreendimentoNome={simuladorConfigTarget.nome}
+          open={!!simuladorConfigTarget}
+          onClose={() => setSimuladorConfigTarget(null)}
+          onSave={() => addToast("success", `Simulador de ${simuladorConfigTarget.nome} configurado!`)}
         />
       )}
 

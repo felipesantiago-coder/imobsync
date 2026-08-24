@@ -46,8 +46,25 @@ export default async function EmpreendimentoPage({
     }
   }
 
-  // Construir URL do simulador a partir do slug (se existir página correspondente)
-  const simuladorUrl = emp.slug ? `/simulador-${emp.slug}` : undefined;
+  // Verificar se existe config de simulador genérico para este empreendimento
+  let simuladorUrl: string | undefined;
+  try {
+    const { data: simConfig } = await supabase
+      .from("simulador_configs")
+      .select("id")
+      .eq("empreendimento_id", id)
+      .maybeSingle();
+    if (simConfig) {
+      // Usar simulador genérico parametrizado
+      simuladorUrl = `/simulador-generico/${id}`;
+    } else if (emp.slug) {
+      // Fallback para simulador legado por slug
+      simuladorUrl = `/simulador-${emp.slug}`;
+    }
+  } catch {
+    // Tabela simulador_configs pode não existir ainda — fallback para slug
+    simuladorUrl = emp.slug ? `/simulador-${emp.slug}` : undefined;
+  }
 
   return (
     <DynamicDashboard
