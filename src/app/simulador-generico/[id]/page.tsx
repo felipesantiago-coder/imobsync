@@ -534,14 +534,15 @@ function SimulatorContent() {
       });
     }
 
-    // ── Parcela Única ──
+    // ── Parcela Única (no mês de entrega) ──
+    const unicaMonths = totalMonths + 1;
     const unicaDate =
-      totalMonths > 0 ? addMonthsToDate(dpDate, totalMonths) : dpDate;
+      unicaMonths > 0 ? addMonthsToDate(dpDate, unicaMonths) : dpDate;
     const unicaScheduleRows: InstallmentRow[] = [];
     if (config.parcela_unica_habilitada && unicaVal > 0) {
       const inccFactorUnica =
-        inccMonthlyRate > 0 && totalMonths > 0
-          ? Math.pow(1 + inccMonthlyRate / 100, totalMonths)
+        inccMonthlyRate > 0 && unicaMonths > 0
+          ? Math.pow(1 + inccMonthlyRate / 100, unicaMonths)
           : 1;
       unicaScheduleRows.push({
         parcela: "1/1",
@@ -910,7 +911,7 @@ function SimulatorContent() {
     }
     if (config?.parcela_unica_habilitada && result.unicaValue > 0) {
       summaryBody.push([
-        `Única (mês anterior à entrega)`,
+        `Única (mês de entrega)`,
         formatBRL(result.unicaValue),
         `${result.unicaPercent.toFixed(2)}%`,
       ]);
@@ -1894,7 +1895,7 @@ function SimulatorContent() {
                           Parcela Única
                         </span>
                         <span className="text-xs text-slate-400">
-                          (mês anterior à entrega)
+                          (no mês de entrega)
                         </span>
                       </div>
                       <div className="flex items-center gap-2">

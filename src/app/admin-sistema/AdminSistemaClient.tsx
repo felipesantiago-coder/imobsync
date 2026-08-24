@@ -121,12 +121,25 @@ export default function AdminSistemaClient() {
   const [updatingRole, setUpdatingRole] = useState<Record<string, boolean>>({});
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
+  // Generic confirmation dialog
+  interface ConfirmActionState {
+    title: string;
+    description: string;
+    confirmLabel: string;
+    variant: "danger" | "warning" | "default";
+    onConfirm: () => void;
+  }
+  const [confirmAction, setConfirmAction] = useState<ConfirmActionState | null>(null);
+
   // Coordenador empreendimentos modal
   const [empModalUser, setEmpModalUser] = useState<{ id: string; nome: string } | null>(null);
 
   // Delete user confirmation
   const [deleteUserTarget, setDeleteUserTarget] = useState<UserProfile | null>(null);
   const [deletingUser, setDeletingUser] = useState(false);
+
+
+  const [empModalUser, setEmpModalUser] = useState<{ id: string; nome: string } | null>(null);
 
   // Toasts
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -189,7 +202,20 @@ export default function AdminSistemaClient() {
     }
   }, [addToast]);
 
-  // ─── Sync plano com Mercado Pago ────────────────────────────────
+  // ─── Sync plano com Mercado Pago (com confirmação) ───────────────
+  const handleSyncPlanoRequest = useCallback((planoId: string, planoNome: string) => {
+    setConfirmAction({
+      title: "Sincronizar com Mercado Pago?",
+      description: `O plano "${planoNome}" será criado/atualizado no Mercado Pago. Isso pode afetar assinaturas em andamento.`,
+      confirmLabel: "Sincronizar",
+      variant: "warning",
+      onConfirm: () => {
+        setConfirmAction(null);
+        handleSyncPlano(planoId);
+      },
+    });
+  }, []);
+
   const handleSyncPlano = useCallback(async (planoId: string) => {
     setSyncingPlano(planoId);
     try {
@@ -295,6 +321,20 @@ export default function AdminSistemaClient() {
       setDeletingPlano(null);
     }
   }, [addToast, fetchPlanosAdmin]);
+
+  const handleTogglePlanoRequest = useCallback((planoId: string, currentAtivo: boolean, planoNome: string) => {
+    const action = currentAtivo ? "desativar" : "ativar";
+    setConfirmAction({
+      title: `${currentAtivo ? "Desativar" : "Ativar"} plano?`,
+      description: `O plano "${planoNome}" será ${action}ado. ${currentAtivo ? "Novos clientes não poderão assinar este plano." : "Ele ficará disponível para novas assinaturas."}`,
+      confirmLabel: currentAtivo ? "Desativar" : "Ativar",
+      variant: currentAtivo ? "danger" : "default",
+      onConfirm: () => {
+        setConfirmAction(null);
+        handleTogglePlano(planoId, currentAtivo);
+      },
+    });
+  }, []);
 
   const handleTogglePlano = useCallback(async (planoId: string, currentAtivo: boolean) => {
     setTogglingPlano(planoId);
@@ -489,7 +529,23 @@ export default function AdminSistemaClient() {
     input.click();
   };
 
-  // ─── Alterar role de usuário ─────────────────────────────────────────
+  // ─── Alterar role de usuário (com confirmação) ────────────────────────
+  const handleRoleChangeRequest = useCallback((userId: string, newRole: string, currentRole: string, userEmail: string) => {
+    const roleLabels: Record<string, string> = { admin_sistema: "Admin", coordenador: "Coordenador", comum: "Comum" };
+    const targetLabel = roleLabels[newRole] || newRole;
+    const isAdmin = newRole === "admin_sistema";
+    setConfirmAction({
+      title: `Alterar função do usuário?`,
+      description: `${userEmail} será alterado de "${roleLabels[currentRole] || currentRole}" para "${targetLabel}".${isAdmin ? " Isso concede acesso total ao painel administrativo." : ""}`,
+      confirmLabel: isAdmin ? "Sim, conceder Admin" : "Confirmar alteração",
+      variant: isAdmin ? "danger" : "warning",
+      onConfirm: () => {
+        setConfirmAction(null);
+        handleRoleChange(userId, newRole);
+      },
+    });
+  }, []);
+
   const handleRoleChange = async (userId: string, newRole: string) => {
     setUpdatingRole((prev) => ({ ...prev, [userId]: true }));
     try {
@@ -935,7 +991,7 @@ export default function AdminSistemaClient() {
                             ) : (
                               <select
                                 value={u.role}
-                                onChange={(e) => handleRoleChange(u.id, e.target.value)}
+                                onChange={(e) => handleRoleChangeRequest(u.id, e.target.value, u.role, u.email)}
                                 disabled={u.id === currentUserId}
                                 title={u.id === currentUserId ? "Você não pode alterar sua própria função" : `Alterar função de ${u.email}`}
                                 className={`text-xs font-semibold rounded-full px-2.5 py-1 border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-gray-900/20 ${
@@ -1040,7 +1096,7 @@ export default function AdminSistemaClient() {
           deletingPlano={deletingPlano}
           togglingPlano={togglingPlano}
           addToast={addToast}
-          onSyncPlano={handleSyncPlano}
+          onSyncPlano={handleSyncPlanoRequest}
           onFetchAssinaturas={fetchAssinaturas}
           onFetchPlanos={fetchPlanosAdmin}
           onOpenStatusChange={handleOpenStatusChange}
@@ -1050,7 +1106,7 @@ export default function AdminSistemaClient() {
           onSetStatusMotivo={setStatusMotivo}
           onSavePlano={handleSavePlano}
           onDeletePlano={handleDeletePlano}
-          onTogglePlano={handleTogglePlano}
+          onTogglePlano={handleTogglePlanoRequest}
         />)}
 
         {/* ═══ TAB: Cupons ═══ */}
@@ -1455,6 +1511,19 @@ export default function AdminSistemaClient() {
           onSave={() => addToast("success", `Simulador de ${simuladorConfigTarget.nome} configurado!`)}
         />
       )}
+
+
+
+      {/* ── Generic Confirmation Dialog ────────────────────────────── */
+      <ConfirmDialog
+        open={!!confirmAction}
+        title={confirmAction?.title || ""}
+        description={confirmAction?.description || ""}
+        confirmLabel={confirmAction?.confirmLabel || "Confirmar"}
+        variant={confirmAction?.variant || "default"}
+        onConfirm={() => { confirmAction?.onConfirm(); }}
+        onCancel={() => setConfirmAction(null)}
+      />
 
       {/* ── Toast Notifications ─────────────────────────────────────────── */}
       <div className="fixed bottom-6 right-6 z-[400] flex flex-col gap-2 max-w-sm">

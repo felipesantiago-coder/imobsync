@@ -5,6 +5,7 @@ import {
   Plus, Trash2, Pencil, Check, AlertCircle, Loader2, Tag,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import ConfirmDialog from "@/components/confirm-dialog";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle,
@@ -45,6 +46,7 @@ function CuponsTab({ addToast, planosAdmin }: CuponsTabProps) {
   const [deleteTarget, setDeleteTarget] = useState<Record<string, unknown> | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [togglingAtivo, setTogglingAtivo] = useState<string | null>(null);
+  const [toggleConfirm, setToggleConfirm] = useState<{ id: string; ativo: boolean; codigo: string } | null>(null);
 
   const fetchCupons = useCallback(async () => {
     try {
@@ -144,8 +146,19 @@ function CuponsTab({ addToast, planosAdmin }: CuponsTabProps) {
     }
   };
 
-  const handleToggleAtivo = async (cupom: Record<string, unknown>) => {
-    setTogglingAtivo(cupom.id as string);
+  const handleToggleAtivoRequest = (cupom: Record<string, unknown>) => {
+    setToggleConfirm({
+      id: cupom.id as string,
+      ativo: cupom.ativo as boolean,
+      codigo: cupom.codigo as string,
+    });
+  };
+
+  const handleToggleAtivo = async () => {
+    if (!toggleConfirm) return;
+    const cupom = cupons.find((c) => c.id === toggleConfirm.id);
+    if (!cupom) return;
+    setTogglingAtivo(toggleConfirm.id);
     try {
       const res = await fetch("/api/admin-sistema/cupons", {
         method: "PATCH", headers: { "Content-Type": "application/json" },
@@ -162,6 +175,7 @@ function CuponsTab({ addToast, planosAdmin }: CuponsTabProps) {
       addToast("error", "Erro ao alterar status.");
     } finally {
       setTogglingAtivo(null);
+      setToggleConfirm(null);
     }
   };
 
@@ -240,7 +254,7 @@ function CuponsTab({ addToast, planosAdmin }: CuponsTabProps) {
                     </td>
                     <td className="px-3 sm:px-5 py-3 sm:py-3.5 text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <button onClick={() => handleToggleAtivo(c)} disabled={togglingAtivo === c.id} className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${(c.ativo as boolean) ? "text-emerald-600 hover:bg-emerald-50" : "text-red-500 hover:bg-red-50"}`} title={c.ativo ? "Desativar" : "Ativar"}>
+                        <button onClick={() => handleToggleAtivoRequest(c)} disabled={togglingAtivo === c.id} className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${(c.ativo as boolean) ? "text-emerald-600 hover:bg-emerald-50" : "text-red-500 hover:bg-red-50"}`} title={c.ativo ? "Desativar" : "Ativar"}>
                           {togglingAtivo === c.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                         </button>
                         <button onClick={() => handleOpenEdit(c)} className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors" title="Editar">
@@ -348,6 +362,18 @@ function CuponsTab({ addToast, planosAdmin }: CuponsTabProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── Toggle confirmation Dialog ── */}
+      <ConfirmDialog
+        open={!!toggleConfirm}
+        title={toggleConfirm?.ativo ? "Desativar cupom?" : "Ativar cupom?"}
+        description={`O cupom "${toggleConfirm?.codigo}" será ${toggleConfirm?.ativo ? "desativado e não poderá ser usado no checkout" : "ativado e ficará disponível para uso"}.`}
+        confirmLabel={toggleConfirm?.ativo ? "Desativar" : "Ativar"}
+        variant={toggleConfirm?.ativo ? "warning" : "default"}
+        onConfirm={handleToggleAtivo}
+        onCancel={() => setToggleConfirm(null)}
+        loading={!!togglingAtivo}
+      />
 
       {/* ── Delete confirmation Dialog ── */}
       <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>

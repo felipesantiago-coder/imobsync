@@ -6,6 +6,7 @@ import {
   Crown, RefreshCw, CreditCard, Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import ConfirmDialog from "@/components/confirm-dialog";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle,
@@ -25,7 +26,7 @@ interface AssinaturasTabProps {
   deletingPlano: string | null;
   togglingPlano: string | null;
   addToast: (type: "success" | "error", message: string) => void;
-  onSyncPlano: (planoId: string) => Promise<void>;
+  onSyncPlano: (planoId: string, planoNome: string) => void;
   onFetchAssinaturas: () => Promise<void>;
   onFetchPlanos: () => Promise<void>;
   onOpenStatusChange: (id: string, current: string) => void;
@@ -35,7 +36,7 @@ interface AssinaturasTabProps {
   onSetStatusMotivo: (v: string) => void;
   onSavePlano: (data: Record<string, unknown>) => Promise<Record<string, unknown> | null>;
   onDeletePlano: (planoId: string) => Promise<void>;
-  onTogglePlano: (planoId: string, currentAtivo: boolean) => Promise<void>;
+  onTogglePlano: (planoId: string, currentAtivo: boolean, planoNome: string) => void;
 }
 
 interface PlanoFormState {
@@ -89,6 +90,7 @@ function AssinaturasTab({
 
   // Correcao de usuarios legados
   const [fixLegacyLoading, setFixLegacyLoading] = useState(false);
+  const [fixLegacyConfirm, setFixLegacyConfirm] = useState(false);
 
   // Conceder plano vitalicio
   const [showLifetimeDialog, setShowLifetimeDialog] = useState(false);
@@ -174,6 +176,7 @@ function AssinaturasTab({
   };
 
   const handleFixLegacy = async () => {
+    setFixLegacyConfirm(false);
     setFixLegacyLoading(true);
     try {
       const res = await fetch("/api/admin-sistema/assinaturas/fix-legacy", { method: "POST" });
@@ -280,7 +283,7 @@ function AssinaturasTab({
               <button onClick={onFetchAssinaturas} className="p-2 rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600">
                 <RefreshCw className="w-4 h-4" />
               </button>
-              <Button onClick={handleFixLegacy} disabled={fixLegacyLoading} className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white shadow-md rounded-xl h-9 px-3 sm:px-4 text-xs font-semibold">
+              <Button onClick={() => setFixLegacyConfirm(true)} disabled={fixLegacyLoading} className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white shadow-md rounded-xl h-9 px-3 sm:px-4 text-xs font-semibold">
                 {fixLegacyLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <AlertCircle className="w-3.5 h-3.5" />}
                 <span className="hidden xs:inline">Corrigir </span>Legados
               </Button>
@@ -407,7 +410,7 @@ function AssinaturasTab({
                     )}
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    <button onClick={() => onTogglePlano(plano.id as string, isAtivo)} disabled={togglingPlano === (plano.id as string)} className={`p-2 rounded-lg border transition-colors text-xs ${isAtivo ? "border-red-200 text-red-500 hover:bg-red-50" : "border-emerald-200 text-emerald-500 hover:bg-emerald-50"} disabled:opacity-50`} title={isAtivo ? "Desativar" : "Ativar"}>
+                    <button onClick={() => onTogglePlano(plano.id as string, isAtivo, plano.nome as string)} disabled={togglingPlano === (plano.id as string)} className={`p-2 rounded-lg border transition-colors text-xs ${isAtivo ? "border-red-200 text-red-500 hover:bg-red-50" : "border-emerald-200 text-emerald-500 hover:bg-emerald-50"} disabled:opacity-50`} title={isAtivo ? "Desativar" : "Ativar"}>
                       {togglingPlano === (plano.id as string) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : isAtivo ? <X className="w-3.5 h-3.5" /> : <Check className="w-3.5 h-3.5" />}
                     </button>
                     <button onClick={() => openEditPlano(plano)} className="p-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors" title="Editar">
@@ -417,7 +420,7 @@ function AssinaturasTab({
                       {deletingPlano === (plano.id as string) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
                     </button>
                     {!hasMpId && (
-                      <button onClick={() => onSyncPlano(plano.id as string)} disabled={syncingPlano === (plano.id as string)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold transition-colors disabled:opacity-50">
+                      <button onClick={() => onSyncPlano(plano.id as string, plano.nome as string)} disabled={syncingPlano === (plano.id as string)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold transition-colors disabled:opacity-50">
                         {syncingPlano === (plano.id as string) ? <><Loader2 className="w-3 h-3 animate-spin" /> Sync...</> : "Sync MP"}
                       </button>
                     )}
@@ -626,6 +629,18 @@ function AssinaturasTab({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── Fix Legacy confirmation ── */}
+      <ConfirmDialog
+        open={fixLegacyConfirm}
+        title="Corrigir usuários legados?"
+        description="Esta ação irá corrigir assinaturas de usuários que pagaram mas não possuem registro ativo. Isso modificará dados de múltiplos usuários automaticamente."
+        confirmLabel="Corrigir Legados"
+        variant="warning"
+        onConfirm={handleFixLegacy}
+        onCancel={() => setFixLegacyConfirm(false)}
+        loading={fixLegacyLoading}
+      />
     </div>
   );
 }

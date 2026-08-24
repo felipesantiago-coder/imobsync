@@ -2,8 +2,9 @@
 
 import React, { useState, useEffect } from "react";
 import {
-  Calculator, X, Loader2, Save, Trash2, Settings,
+  Calculator, X, Loader2, Save, Trash2, Settings, AlertTriangle,
 } from "lucide-react";
+import ConfirmDialog from "@/components/confirm-dialog";
 
 const MESES = [
   { value: 1, label: "Janeiro" }, { value: 2, label: "Fevereiro" }, { value: 3, label: "Março" },
@@ -48,9 +49,11 @@ export default function SimuladorConfigModal({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [existingConfig, setExistingConfig] = useState(false);
+  const [isLegacy, setIsLegacy] = useState(false);
 
   const [form, setForm] = useState<SimuladorConfig>({
     empreendimento_id: empreendimentoId,
@@ -82,6 +85,13 @@ export default function SimuladorConfigModal({
           setForm(data.config);
           setExistingConfig(true);
         } else {
+          // Check if this empreendimento has a legacy simulator (slug-based route)
+          const slugRes = await fetch(`/api/empreendimentos`);
+          if (slugRes.ok) {
+            const slugData = await slugRes.json();
+            const emp = (slugData.empreendimentos || []).find((e: Record<string, unknown>) => e.id === empreendimentoId);
+            setIsLegacy(!!emp?.slug);
+          }
           setForm({
             empreendimento_id: empreendimentoId,
             entrega_mes: 12,
@@ -142,7 +152,7 @@ export default function SimuladorConfigModal({
   };
 
   const handleDelete = async () => {
-    if (!confirm("Remover a configuração do simulador?")) return;
+    setDeleteConfirm(false);
     setDeleting(true);
     try {
       const res = await fetch(
@@ -210,6 +220,14 @@ export default function SimuladorConfigModal({
               {success && (
                 <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-sm text-emerald-700 flex items-center gap-2">
                   <Save className="w-4 h-4 shrink-0" /> {success}
+                </div>
+              )}
+
+              {/* Aviso: empreendimento legado */}
+              {!existingConfig && isLegacy && (
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-700 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>Este empreendimento já possui um simulador ativo. Ao salvar esta configuração, o simulador atual será substituído pelo novo simulador parametrizado.</span>
                 </div>
               )}
 
@@ -383,7 +401,7 @@ export default function SimuladorConfigModal({
           <div className="sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4 rounded-b-2xl flex items-center justify-between">
             {existingConfig ? (
               <button
-                onClick={handleDelete}
+                onClick={() => setDeleteConfirm(true)}
                 disabled={deleting}
                 className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-semibold border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-all disabled:opacity-50"
               >
@@ -412,6 +430,21 @@ export default function SimuladorConfigModal({
           </div>
         )}
       </div>
+
+      {/* Delete confirmation */}
+      <ConfirmDialog
+        open={deleteConfirm}
+        title="Remover configuração do simulador?"
+        description={isLegacy
+          ? "Ao remover, o sistema voltará a usar o simulador original deste empreendimento."
+          : "Ao remover, este empreendimento ficará sem simulador configurado."
+        }
+        confirmLabel="Remover"
+        variant="danger"
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteConfirm(false)}
+        loading={deleting}
+      />
     </div>
   );
 }
