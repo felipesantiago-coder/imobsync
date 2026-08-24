@@ -602,7 +602,7 @@ function SimulatorContent() {
     { description: "Sinal Ato", value: formatBRL(result.downPaymentValue), percent: result.downPaymentPercent, note: "Pagamento à vista", bold: false, isHighlight: false, isIncc: false },
     { description: "Parcelas Mensais", value: formatBRL(result.monthlyPaid), percent: result.monthlyPaidPercent, note: `${result.maxMonthlyInstallments} parcelas durante a obra`, bold: false, isHighlight: false, isIncc: false },
     { description: "Parcelas Semestrais", value: formatBRL(result.semesterPaid), percent: result.semesterPaidPercent, note: `${result.maxSemesterInstallments} parcelas durante a obra`, bold: false, isHighlight: false, isIncc: false },
-    { description: "Taxa de Decoração", value: formatBRL(DECORATION_FEE), percent: null as number | null, note: "Inclusa no financiamento", bold: false, isHighlight: false, isIncc: false },
+    { description: "Taxa de Decoração", value: formatBRL(DECORATION_FEE), percent: null as number | null, note: "Parcelas mensais até a entrega (não compõe o financiamento)", bold: false, isHighlight: false, isIncc: false },
     { description: "Financiamento", value: formatBRL(result.habiteseAmount), percent: result.habitesePercent, note: "Saldo devedor restante", bold: false, isHighlight: false, isIncc: false },
     ...(inccMode !== "none" && result.inccAccumulatedPercent > 0 ? [{
       description: "Financiamento (estimativa INCC)*", value: formatBRL(result.habiteseCorrected), percent: result.habitesePercent > 0 ? (result.habiteseCorrected / result.finalPropertyValue) * 100 : 0, note: `INCC +${result.inccAccumulatedPercent.toFixed(2)}% (${inccMonthlyRate.toFixed(3)}% a.m.)`, bold: false, isHighlight: false, isIncc: true,
