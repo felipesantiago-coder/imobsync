@@ -138,9 +138,6 @@ export default function AdminSistemaClient() {
   const [deleteUserTarget, setDeleteUserTarget] = useState<UserProfile | null>(null);
   const [deletingUser, setDeletingUser] = useState(false);
 
-
-  const [empModalUser, setEmpModalUser] = useState<{ id: string; nome: string } | null>(null);
-
   // Toasts
   const [toasts, setToasts] = useState<Toast[]>([]);
 
@@ -1514,7 +1511,7 @@ export default function AdminSistemaClient() {
 
 
 
-      {/* ── Generic Confirmation Dialog ────────────────────────────── */
+      {/* ── Generic Confirmation Dialog ────────────────────────────── */}
       <ConfirmDialog
         open={!!confirmAction}
         title={confirmAction?.title || ""}

@@ -12,6 +12,7 @@ import {
   ArrowLeft,
   Filter,
 } from "lucide-react";
+import ConfirmDialog from "@/components/confirm-dialog";
 
 interface DBUnit {
   id: number;
@@ -70,6 +71,7 @@ export default function AdminClient() {
   const [changedUnits, setChangedUnits] = useState<Map<number, string>>(new Map());
   const [lastSync, setLastSync] = useState<string>("");
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false);
 
   const fetchUnits = useCallback(async () => {
     try {
@@ -124,8 +126,13 @@ export default function AdminClient() {
     setSaveSuccess(false);
   }, []);
 
-  const handleSave = useCallback(async () => {
+  const handleSave = useCallback(() => {
     if (changedUnits.size === 0) return;
+    setShowSaveConfirm(true);
+  }, [changedUnits]);
+
+  const confirmSave = useCallback(async () => {
+    setShowSaveConfirm(false);
     setSaving(true);
     try {
       const updates = Array.from(changedUnits.entries()).map(([unidade, status]) => ({ unidade, status }));
@@ -345,6 +352,17 @@ export default function AdminClient() {
           <p className="text-center text-xs text-gray-400">Quattre Istambul — Painel Administrativo {lastSync && `• Sincronizado às ${lastSync}`}</p>
         </div>
       </footer>
+      <ConfirmDialog
+        open={showSaveConfirm}
+        title="Salvar alterações"
+        description={`Você alterou o status de ${changedUnits.size} unidade(s). Deseja confirmar as mudanças?`}
+        confirmLabel="Salvar"
+        cancelLabel="Cancelar"
+        variant="default"
+        onConfirm={confirmSave}
+        onCancel={() => setShowSaveConfirm(false)}
+        loading={false}
+      />
     </div>
   );
 }

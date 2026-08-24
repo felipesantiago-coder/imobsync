@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import MobileMenu from "@/components/MobileMenu";
 import { createClient } from "@/lib/supabase/client";
+import ConfirmDialog from "@/components/confirm-dialog";
 
 // ─── Interfaces ───
 interface ProjetoUnit {
@@ -991,6 +992,7 @@ export default function DynamicDashboard({
   const [updateMode, setUpdateMode] = useState(false);
   const [selectedForBatch, setSelectedForBatch] = useState<Set<string>>(new Set());
   const [batchSaving, setBatchSaving] = useState(false);
+  const [batchConfirmStatus, setBatchConfirmStatus] = useState<UnitStatus | null>(null);
   const [collapsedFloors, setCollapsedFloors] = useState<Set<number>>(
     new Set()
   );
@@ -1230,8 +1232,15 @@ export default function DynamicDashboard({
     setSelectedForBatch(new Set());
   }, []);
 
-  const handleBatchStatusChange = useCallback(async (newStatus: UnitStatus) => {
+  const handleBatchStatusChange = useCallback((newStatus: UnitStatus) => {
     if (batchSaving || selectedForBatch.size === 0) return;
+    setBatchConfirmStatus(newStatus);
+  }, [batchSaving, selectedForBatch]);
+
+  const confirmBatchStatusChange = useCallback(async () => {
+    if (!batchConfirmStatus) return;
+    const newStatus = batchConfirmStatus;
+    setBatchConfirmStatus(null);
     setBatchSaving(true);
     try {
       const updates = Array.from(selectedForBatch).map(async (unitId) => {
@@ -1261,7 +1270,7 @@ export default function DynamicDashboard({
     } finally {
       setBatchSaving(false);
     }
-  }, [batchSaving, selectedForBatch, units, empreendimentoId]);
+  }, [batchConfirmStatus, selectedForBatch, units, empreendimentoId]);
 
   const toggleFloor = useCallback((floor: number) => {
     setCollapsedFloors((prev) => {
@@ -1737,6 +1746,17 @@ export default function DynamicDashboard({
           />
         )}
       </AnimatePresence>
+      <ConfirmDialog
+        open={!!batchConfirmStatus}
+        title="Alterar status em lote"
+        description={`Deseja alterar o status de ${selectedForBatch.size} unidade(s) para "${batchConfirmStatus === "disponivel" ? "Disponível" : batchConfirmStatus === "reservado" ? "Reservada" : "Vendida"}"?`}
+        confirmLabel="Confirmar"
+        cancelLabel="Cancelar"
+        variant="warning"
+        onConfirm={confirmBatchStatusChange}
+        onCancel={() => setBatchConfirmStatus(null)}
+        loading={false}
+      />
     </div>
   );
 }

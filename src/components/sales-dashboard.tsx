@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import MobileMenu from "@/components/MobileMenu";
 import { createClient } from "@/lib/supabase/client";
 import { Badge } from "@/components/ui/badge";
+import ConfirmDialog from "@/components/confirm-dialog";
 
 // ─── Color palette for unit types ───
 const typeColors: Record<Unit["tipoArea"], { bg: string; border: string; text: string; gradient: string; accent: string }> = {
@@ -677,6 +678,7 @@ export default function SalesDashboard({ isAdmin = false, isCoordinator = false,
   const [updateMode, setUpdateMode] = useState(false);
   const [selectedForBatch, setSelectedForBatch] = useState<Set<number>>(new Set());
   const [batchSaving, setBatchSaving] = useState(false);
+  const [batchConfirmStatus, setBatchConfirmStatus] = useState<string | null>(null);
 
   // Buscar dados do Supabase via API + Realtime
   useEffect(() => {
@@ -785,8 +787,15 @@ export default function SalesDashboard({ isAdmin = false, isCoordinator = false,
     setSelectedForBatch(new Set());
   }, []);
 
-  const handleBatchStatusChange = useCallback(async (newStatus: "disponivel" | "reservado" | "vendido") => {
+  const handleBatchStatusChange = useCallback((newStatus: "disponivel" | "reservado" | "vendido") => {
     if (batchSaving || selectedForBatch.size === 0) return;
+    setBatchConfirmStatus(newStatus);
+  }, [batchSaving, selectedForBatch]);
+
+  const confirmBatchStatusChange = useCallback(async () => {
+    if (!batchConfirmStatus) return;
+    const newStatus = batchConfirmStatus as "disponivel" | "reservado" | "vendido";
+    setBatchConfirmStatus(null);
     setBatchSaving(true);
     try {
       const updates = Array.from(selectedForBatch).map(async (unidade) => {
@@ -809,7 +818,7 @@ export default function SalesDashboard({ isAdmin = false, isCoordinator = false,
     } finally {
       setBatchSaving(false);
     }
-  }, [batchSaving, selectedForBatch]);
+  }, [batchConfirmStatus, selectedForBatch]);
 
   const toggleFloor = useCallback((floor: number) => {
     setCollapsedFloors((prev) => {
@@ -1120,6 +1129,17 @@ export default function SalesDashboard({ isAdmin = false, isCoordinator = false,
           />
         )}
       </AnimatePresence>
+      <ConfirmDialog
+        open={!!batchConfirmStatus}
+        title="Alterar status em lote"
+        description={`Deseja alterar o status de ${selectedForBatch.size} unidade(s) para "${batchConfirmStatus === "disponivel" ? "Disponível" : batchConfirmStatus === "reservado" ? "Reservada" : "Vendida"}"?`}
+        confirmLabel="Confirmar"
+        cancelLabel="Cancelar"
+        variant="warning"
+        onConfirm={confirmBatchStatusChange}
+        onCancel={() => setBatchConfirmStatus(null)}
+        loading={false}
+      />
     </div>
   );
 }

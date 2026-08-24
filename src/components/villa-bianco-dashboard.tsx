@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import MobileMenu from "@/components/MobileMenu";
 import { createClient } from "@/lib/supabase/client";
 import { Badge } from "@/components/ui/badge";
+import ConfirmDialog from "@/components/confirm-dialog";
 
 // ─── Color palette for tipologias ───
 type TipologiaKey = VillaBiancoUnit["tipologia"];
@@ -749,6 +750,7 @@ export default function VillaBiancoDashboard({ isAdmin = false, isCoordinator = 
   const [updateMode, setUpdateMode] = useState(false);
   const [selectedForBatch, setSelectedForBatch] = useState<Set<string>>(new Set());
   const [batchSaving, setBatchSaving] = useState(false);
+  const [batchConfirmStatus, setBatchConfirmStatus] = useState<VillaBiancoUnit["status"] | null>(null);
 
   // Buscar dados do Supabase via API + Realtime
   useEffect(() => {
@@ -858,8 +860,15 @@ export default function VillaBiancoDashboard({ isAdmin = false, isCoordinator = 
     setSelectedForBatch(new Set());
   }, []);
 
-  const handleBatchStatusChange = useCallback(async (newStatus: VillaBiancoUnit["status"]) => {
+  const handleBatchStatusChange = useCallback((newStatus: VillaBiancoUnit["status"]) => {
     if (batchSaving || selectedForBatch.size === 0) return;
+    setBatchConfirmStatus(newStatus);
+  }, [batchSaving, selectedForBatch]);
+
+  const confirmBatchStatusChange = useCallback(async () => {
+    if (!batchConfirmStatus) return;
+    const newStatus = batchConfirmStatus;
+    setBatchConfirmStatus(null);
     setBatchSaving(true);
     try {
       const updates = Array.from(selectedForBatch).map(async (key) => {
@@ -889,7 +898,7 @@ export default function VillaBiancoDashboard({ isAdmin = false, isCoordinator = 
     } finally {
       setBatchSaving(false);
     }
-  }, [batchSaving, selectedForBatch]);
+  }, [batchConfirmStatus, selectedForBatch]);
 
   const toggleBlock = useCallback((bloco: VillaBiancoBloco) => {
     setCollapsedBlocks((prev) => {
@@ -1202,6 +1211,18 @@ export default function VillaBiancoDashboard({ isAdmin = false, isCoordinator = 
           />
         )}
       </AnimatePresence>
+
+      <ConfirmDialog
+        open={!!batchConfirmStatus}
+        title="Alterar status em lote"
+        description={`Deseja alterar o status de ${selectedForBatch.size} unidade(s) para "${batchConfirmStatus === "disponivel" ? "Disponível" : batchConfirmStatus === "reservado" ? "Reservada" : "Vendida"}"?`}
+        confirmLabel="Confirmar"
+        cancelLabel="Cancelar"
+        variant="warning"
+        onConfirm={confirmBatchStatusChange}
+        onCancel={() => setBatchConfirmStatus(null)}
+        loading={false}
+      />
     </div>
   );
 }

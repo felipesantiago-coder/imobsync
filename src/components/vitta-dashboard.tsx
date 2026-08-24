@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import MobileMenu from "@/components/MobileMenu";
 import { createClient } from "@/lib/supabase/client";
 import { Badge } from "@/components/ui/badge";
+import ConfirmDialog from "@/components/confirm-dialog";
 
 // ─── Color palette for tipos ───
 type TipoKey = VittaUnit["tipo"];
@@ -619,6 +620,7 @@ export default function VittaDashboard({ isAdmin = false, isCoordinator = false,
   const [updateMode, setUpdateMode] = useState(false);
   const [selectedForBatch, setSelectedForBatch] = useState<Set<string>>(new Set());
   const [batchSaving, setBatchSaving] = useState(false);
+  const [batchConfirmStatus, setBatchConfirmStatus] = useState<VittaUnit["status"] | null>(null);
 
   // Carregar unidades do banco (fallback para dados estáticos)
   useEffect(() => {
@@ -671,8 +673,15 @@ export default function VittaDashboard({ isAdmin = false, isCoordinator = false,
     setSelectedForBatch(new Set());
   }, []);
 
-  const handleBatchStatusChange = useCallback(async (newStatus: VittaUnit["status"]) => {
+  const handleBatchStatusChange = useCallback((newStatus: VittaUnit["status"]) => {
     if (batchSaving || selectedForBatch.size === 0) return;
+    setBatchConfirmStatus(newStatus);
+  }, [batchSaving, selectedForBatch]);
+
+  const confirmBatchStatusChange = useCallback(async () => {
+    if (!batchConfirmStatus) return;
+    const newStatus = batchConfirmStatus;
+    setBatchConfirmStatus(null);
     setBatchSaving(true);
     try {
       const updates = Array.from(selectedForBatch).map(async (key) => {
@@ -709,7 +718,7 @@ export default function VittaDashboard({ isAdmin = false, isCoordinator = false,
     } finally {
       setBatchSaving(false);
     }
-  }, [batchSaving, selectedForBatch, units]);
+  }, [batchConfirmStatus, selectedForBatch, units]);
 
   const handleLocalStatusChange = useCallback(async (unidade: number, bloco: string, andar: string, newStatus: VittaUnit["status"]) => {
     // Otimistic update
@@ -973,6 +982,18 @@ export default function VittaDashboard({ isAdmin = false, isCoordinator = false,
           />
         )}
       </AnimatePresence>
+
+      <ConfirmDialog
+        open={!!batchConfirmStatus}
+        title="Alterar status em lote"
+        description={`Deseja alterar o status de ${selectedForBatch.size} unidade(s) para "${batchConfirmStatus === "disponivel" ? "Disponível" : batchConfirmStatus === "reservado" ? "Reservada" : "Vendida"}"?`}
+        confirmLabel="Confirmar"
+        cancelLabel="Cancelar"
+        variant="warning"
+        onConfirm={confirmBatchStatusChange}
+        onCancel={() => setBatchConfirmStatus(null)}
+        loading={false}
+      />
     </div>
   );
 }

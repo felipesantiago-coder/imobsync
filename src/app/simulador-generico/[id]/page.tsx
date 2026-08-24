@@ -534,8 +534,8 @@ function SimulatorContent() {
       });
     }
 
-    // ── Parcela Única (no mês de entrega) ──
-    const unicaMonths = totalMonths + 1;
+    // ── Parcela Única (mês anterior à entrega) ──
+    const unicaMonths = totalMonths;
     const unicaDate =
       unicaMonths > 0 ? addMonthsToDate(dpDate, unicaMonths) : dpDate;
     const unicaScheduleRows: InstallmentRow[] = [];
@@ -1895,7 +1895,7 @@ function SimulatorContent() {
                           Parcela Única
                         </span>
                         <span className="text-xs text-slate-400">
-                          (no mês de entrega)
+                          (mês anterior à entrega)
                         </span>
                       </div>
                       <div className="flex items-center gap-2">

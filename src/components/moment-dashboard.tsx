@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import MobileMenu from "@/components/MobileMenu";
 import { createClient } from "@/lib/supabase/client";
 import { Badge } from "@/components/ui/badge";
+import ConfirmDialog from "@/components/confirm-dialog";
 
 // ─── Color palette for tipologias ───
 type TipologiaKey = MomentUnit["tipologia"];
@@ -668,6 +669,7 @@ export default function MomentDashboard({ isAdmin = false, isCoordinator = false
   const [updateMode, setUpdateMode] = useState(false);
   const [selectedForBatch, setSelectedForBatch] = useState<Set<number>>(new Set());
   const [batchSaving, setBatchSaving] = useState(false);
+  const [batchConfirmStatus, setBatchConfirmStatus] = useState<"disponivel" | "reservado" | "vendido" | null>(null);
 
   // Buscar dados do Supabase via API + Realtime
   useEffect(() => {
@@ -758,8 +760,15 @@ export default function MomentDashboard({ isAdmin = false, isCoordinator = false
     setSelectedForBatch((prev) => { const next = new Set(prev); if (next.has(unit.unidade)) next.delete(unit.unidade); else next.add(unit.unidade); return next; });
   }, []);
   const handleBatchClear = useCallback(() => setSelectedForBatch(new Set()), []);
-  const handleBatchStatusChange = useCallback(async (newStatus: "disponivel" | "reservado" | "vendido") => {
+  const handleBatchStatusChange = useCallback((newStatus: "disponivel" | "reservado" | "vendido") => {
     if (batchSaving || selectedForBatch.size === 0) return;
+    setBatchConfirmStatus(newStatus);
+  }, [batchSaving, selectedForBatch]);
+
+  const confirmBatchStatusChange = useCallback(async () => {
+    if (!batchConfirmStatus) return;
+    const newStatus = batchConfirmStatus;
+    setBatchConfirmStatus(null);
     setBatchSaving(true);
     try {
       const updates = Array.from(selectedForBatch).map(async (unidade) => {
@@ -771,7 +780,7 @@ export default function MomentDashboard({ isAdmin = false, isCoordinator = false
       setUnits((prev) => prev.map((u) => (succeeded.includes(u.unidade) ? { ...u, status: newStatus } : u)));
       setSelectedForBatch(new Set());
     } catch (err) { console.error("Erro ao atualizar em lote:", err); } finally { setBatchSaving(false); }
-  }, [batchSaving, selectedForBatch]);
+  }, [batchConfirmStatus, selectedForBatch]);
 
   const handleSelectUnit = useCallback((unit: MomentUnit) => {
     setSelectedUnit(unit);
@@ -1088,6 +1097,18 @@ export default function MomentDashboard({ isAdmin = false, isCoordinator = false
           <BatchActionBar count={selectedForBatch.size} onApplyStatus={handleBatchStatusChange} onClear={handleBatchClear} saving={batchSaving} />
         )}
       </AnimatePresence>
+
+      <ConfirmDialog
+        open={!!batchConfirmStatus}
+        title="Alterar status em lote"
+        description={`Deseja alterar o status de ${selectedForBatch.size} unidade(s) para "${batchConfirmStatus === "disponivel" ? "Disponível" : batchConfirmStatus === "reservado" ? "Reservada" : "Vendida"}"?`}
+        confirmLabel="Confirmar"
+        cancelLabel="Cancelar"
+        variant="warning"
+        onConfirm={confirmBatchStatusChange}
+        onCancel={() => setBatchConfirmStatus(null)}
+        loading={false}
+      />
     </div>
   );
 }

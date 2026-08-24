@@ -80,7 +80,7 @@ export default function SimuladorConfigModal({
     setLoading(true);
     fetch(`/api/admin-sistema/simulador-config?empreendimento_id=${empreendimentoId}`)
       .then((r) => r.json())
-      .then((data) => {
+      .then(async (data) => {
         if (data.config) {
           setForm(data.config);
           setExistingConfig(true);

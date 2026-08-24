@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { startRegistration } from "@simplewebauthn/browser";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { Shield, Fingerprint, Smartphone, Plus, Trash2, Check, Loader2, AlertCircle, ArrowLeft, Key } from "lucide-react";
+import ConfirmDialog from "@/components/confirm-dialog";
 
 type Tab = "totp" | "passkey";
 
@@ -33,6 +34,10 @@ export default function MfaSetupPage() {
   const [disableTotpCode, setDisableTotpCode] = useState("");
   const [disableLoading, setDisableLoading] = useState(false);
   const [disableError, setDisableError] = useState("");
+
+  // Delete passkey confirmation
+  const [deletePasskeyId, setDeletePasskeyId] = useState<string | null>(null);
+  const [deletePasskeyLoading, setDeletePasskeyLoading] = useState(false);
 
   // General
   const [loading, setLoading] = useState(true);
@@ -197,12 +202,17 @@ export default function MfaSetupPage() {
   };
 
   const deletePasskey = async (id: string) => {
-    if (!confirm("Remover este dispositivo?")) return;
+    setDeletePasskeyId(id);
+  };
+
+  const confirmDeletePasskey = async () => {
+    if (!deletePasskeyId) return;
+    setDeletePasskeyLoading(true);
     try {
       const res = await fetch("/api/mfa/disable", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ passkeyId: id }),
+        body: JSON.stringify({ passkeyId: deletePasskeyId }),
       });
       if (res.ok) {
         await loadStatus();
@@ -212,6 +222,9 @@ export default function MfaSetupPage() {
       }
     } catch {
       alert("Erro de conexão. Verifique sua internet.");
+    } finally {
+      setDeletePasskeyLoading(false);
+      setDeletePasskeyId(null);
     }
   };
 
@@ -519,6 +532,18 @@ export default function MfaSetupPage() {
           </div>
         </div>
       </main>
+      {/* Delete passkey confirmation */}
+      <ConfirmDialog
+        open={!!deletePasskeyId}
+        title="Remover dispositivo"
+        description="Tem certeza que deseja remover este dispositivo? Você precisará registrá-lo novamente para usá-lo no login."
+        confirmLabel="Remover"
+        cancelLabel="Cancelar"
+        variant="danger"
+        onConfirm={confirmDeletePasskey}
+        onCancel={() => setDeletePasskeyId(null)}
+        loading={deletePasskeyLoading}
+      />
     </div>
   );
 }
