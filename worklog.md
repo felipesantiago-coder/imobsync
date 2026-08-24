@@ -1,77 +1,24 @@
-# Worklog - ImobSync Brand Migration
+# Work Log
 
 ---
 Task ID: 1
-Agent: Main Agent
-Task: Migrate entire visual identity from Quadra Desk to ImobSync
+Agent: Main
+Task: Implementar simulador genérico parametrizado para novos empreendimentos
 
 Work Log:
-- Analyzed 4 brand assets (logo claro/escuro, simbolo claro/escuro) via VLM
-- Extracted brand colors: #0D1B2A (primary dark navy), #00C7F0 (accent cyan), #F7F9FB (light)
-- Copied and optimized brand assets to /public/ (favicon, apple-touch-icon, 36/64px icons, header logos)
-- Updated design tokens in globals.css with brand oklch values for light and dark modes
-- Updated metadata/SEO in layout.tsx (title, description, keywords, icons, OG, Twitter cards)
-- Ran automated migration script replacing 'Quadra Desk' → 'ImobSync' in 23 source files (60+ occurrences)
-- Replaced logo paths in 13 files (/qd-logo.png → /imobsync-icon-claro-36.png, /quadra-desk-logo.png → /imobsync-logo-claro.png)
-- Updated all 17 header gradients (gray-900/gray-800 → solid #0D1B2A) across pages and dashboards
-- Updated 5 simulador pages with brand color headers
-- Updated login page: button, right panel, focus rings with cyan accent
-- Updated plan/subscription pages with brand CTA colors
-- Updated email template colors in MFA notification
-- Updated MFA backend references (TOTP app name, WebAuthn RP name)
-- Verified no remaining 'Quadra Desk' references in source code
-- Verified no remaining old logo paths in source code
-- Ran lint: 0 new errors (3 pre-existing errors unrelated to migration)
-- Verified dev server compiles and pages load (200 status)
-- Committed and pushed to origin/main
+- Explorou 5 simuladores existentes (Quattre, Venice Park, Vitta, Moment, Villa Bianco)
+- Mapeou schema do banco (empreendimentos, projeto_units, perfis)
+- Criou migration SQL: tabela `simulador_configs` com entrega, percentuais, tipos opcionais, taxa decoração
+- Criou API admin: CRUD em `/api/admin-sistema/simulador-config`
+- Criou API pública: GET em `/api/simulador-config/[empreendimentoId]`
+- Criou componente `SimuladorConfigModal.tsx` com formulário completo
+- Adicionou botão 'Simulador' no card de cada empreendimento no admin
+- Criou simulador genérico `/simulador-generico/[id]` com 8 tipos de parcela
+- Atualizou roteamento em `/empreendimento/[id]` para detectar config e redirecionar
+- Corrigiu erros TypeScript (color types, INCC mode narrowing, subscription guard)
 
 Stage Summary:
-- 32 source files modified
-- 12 brand asset files added to /public/
-- 88 files total in commit (includes brand asset mode changes)
-- Zero functional changes - all 20+ pages, 5 dashboards, 5 simuladores preserved
-- Zero regressions introduced
-- Commit: 0262872 pushed to main
----
-Task ID: 7
-Agent: Main Agent
-Task: Investigar e corrigir erro 500 no POST /api/signup-subscribe
-
-Work Log:
-- Mapeei as 6 chamadas externas do log Vercel: GET(plano) → POST(createUser) → POST(upsert profile) → GET(check sub) → POST(MP create) → DELETE(cleanup)
-- Identifiquei que a chamada POST #5 (Mercado Pago) falha, triggerando o catch interno que faz DELETE #6 (deleteUser)
-- Li o SDK mercadopago v3.4.0 tipos (PreApprovalResponse, ApiResponse) para confirmar formato de resposta
-- Identifiquei 3 bugs: (1) erro do MP engolido sem log detalhado, (2) subscription_id vazio causa UNIQUE constraint, (3) auto_recurring hardcodiza frequencia mensal com cupom
-- Corrigi createMpSubscription com try/catch detalhado que extrai status/message/cause do SDK
-- Corrigi signup-subscribe para nao inserir subscription_id vazio e retornar erros descritivos
-- Corrigi auto_recurring para usar planoPeriodoMeses ao inves de hardcoded 1
-- Apliquei mesma correcao de planoPeriodoMeses em subscriptions/create
-- Push para GitHub (b74ea85)
-
-Stage Summary:
-- Deploy automatico via Vercel
-- Apos deploy, o log do Vercel mostrara a causa exata do erro do MP nos server logs
-- O usuario vera mensagem descritiva (ex: "Erro ao conectar com o Mercado Pago") em vez de 500 generico
-- Causas provaveis do erro original: token MP invalido/expirado OU plano MP inexistente/inativo
----
-Task ID: 3
-Agent: main
-Task: Investigar e corrigir falha de aplicação de cupom no signup-subscribe
-
-Work Log:
-- Analisei os logs do Vercel fornecidos pelo usuário (2 deploy: antigo com erro NULL email, novo sem erro visível)
-- Li signup-subscribe/route.ts, mercadopago.ts, PlanosPublicClient.tsx, cupons/validate/route.ts
-- Identifiquei a RAIZ DO PROBLEMA: CHECK constraint na tabela profiles não incluía 'comum'
-  - schema-admin.sql: CHECK (role IN ('coordenador', 'admin_sistema'))
-  - O upsert tentava inserir/atualizar com role='comum' → falhava na constraint
-  - O erro NULL email era um sintoma: o upsert falhava e o erro era reportado com a row que tentou inserir
-- Corrigi signup-subscribe: troquei upsert por UPDATE (trigger criou a linha) + INSERT fallback
-- Criei migration-fix-role-check-and-trigger.sql para corrigir CHECK constraint + trigger no BD live
-- Adicionei logging detalhado em todo o fluxo (body, plano, user, cupom, MP, checkout URL)
-- Melhorei logging no mercadopago.ts (mudei console.error para console.log nos logs informativos)
-
-Stage Summary:
-- Commit 778a6cf push para origin/main
-- Migration criada em supabase/migration-fix-role-check-and-trigger.sql (PRECISA ser executada manualmente no Supabase)
-- O código agora é resiliente: funciona mesmo sem a migration (trigger cria perfil com 'coordenador', nosso update preenche subscription_status)
-- Com a migration aplicada, o trigger já cria com 'comum' e o update é redundante mas inofensivo
+- 7 arquivos modificados/criados, 3415 linhas adicionadas
+- Os 5 simuladores existentes NÃO foram alterados
+- Deploy feito com sucesso via push para main
+- **PENDENTE**: Executar `supabase/migration-simulador-configs.sql` no SQL Editor do Supabase
