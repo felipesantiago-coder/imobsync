@@ -147,7 +147,7 @@ const UnitCard = memo(function UnitCard({
   };
   const handleStatusClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isAdmin) { if (saving) return; const next = getNextStatus(unit.status); updateStatus(next); return; }
+    if (isAdmin && updateMode) { if (saving) return; const next = getNextStatus(unit.status); updateStatus(next); return; }
   };
   const handleFlipStatusSelect = async (newStatus: MomentUnit["status"]) => {
     if (saving) return;
@@ -210,8 +210,8 @@ const UnitCard = memo(function UnitCard({
           </div>
           <button
             onClick={handleStatusClick}
-            className={`inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full border ${status.color} ${isAdmin ? "cursor-pointer hover:opacity-80 ring-1 ring-offset-1 ring-gray-200 hover:ring-gray-400" : "cursor-default"}`}
-            title={isAdmin ? "Clique para alterar o status" : undefined}
+            className={`inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full border ${status.color} ${isAdmin && updateMode ? "cursor-pointer hover:opacity-80 ring-1 ring-offset-1 ring-gray-200 hover:ring-gray-400" : "cursor-default"}`}
+            title={isAdmin && updateMode ? "Clique para alterar o status" : undefined}
           >
             {saving ? (
               <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-pulse" />

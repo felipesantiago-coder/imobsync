@@ -139,10 +139,10 @@ const UnitCard = memo(function UnitCard({
     onSelect(unit);
   };
 
-  // Badge click: always cycle status for admin (works regardless of update mode)
+  // Badge click: only cycle status when update mode is active
   const handleStatusClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isAdmin) {
+    if (isAdmin && updateMode) {
       if (saving) return;
       const next = getNextStatus(unit.status);
       if (onStatusChange) onStatusChange(unit.unidade, unit.bloco, unit.andar, next);
@@ -209,8 +209,8 @@ const UnitCard = memo(function UnitCard({
           </div>
           <button
             onClick={handleStatusClick}
-            className={`inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full border ${status.color} ${isAdmin ? "cursor-pointer hover:opacity-80 ring-1 ring-offset-1 ring-gray-200 hover:ring-gray-400" : "cursor-default"}`}
-            title={isAdmin ? "Clique para alterar o status" : undefined}
+            className={`inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full border ${status.color} ${isAdmin && updateMode ? "cursor-pointer hover:opacity-80 ring-1 ring-offset-1 ring-gray-200 hover:ring-gray-400" : "cursor-default"}`}
+            title={isAdmin && updateMode ? "Clique para alterar o status" : undefined}
           >
             <span className={`w-1.5 h-1.5 rounded-full ${status.dotColor}`} />
             {status.label}
