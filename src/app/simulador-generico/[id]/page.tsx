@@ -534,8 +534,8 @@ function SimulatorContent() {
       });
     }
 
-    // ── Parcela Única (mês anterior à entrega) ──
-    const unicaMonths = totalMonths;
+    // ── Parcela Única (mês da entrega) ──
+    const unicaMonths = totalMonths + 1;
     const unicaDate =
       unicaMonths > 0 ? addMonthsToDate(dpDate, unicaMonths) : dpDate;
     const unicaScheduleRows: InstallmentRow[] = [];
@@ -1895,7 +1895,7 @@ function SimulatorContent() {
                           Parcela Única
                         </span>
                         <span className="text-xs text-slate-400">
-                          (mês anterior à entrega)
+                          (mês da entrega)
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
@@ -1933,7 +1933,7 @@ function SimulatorContent() {
                               className="w-full h-12 px-4 rounded-xl border border-slate-200 bg-slate-50 text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-600 focus:bg-white transition-all placeholder:text-slate-400 text-right"
                             />
                             <p className="text-xs text-slate-400">
-                              Paga no mês anterior à entrega ({deliveryLabel}).
+                              Paga no mês da entrega ({deliveryLabel}).
                               Compõe a captação da obra.
                             </p>
                           </div>

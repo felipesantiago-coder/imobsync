@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { X, Loader2, Building2, CheckSquare, Square, Check } from "lucide-react";
+import ConfirmDialog from "@/components/confirm-dialog";
 
 interface Empreendimento {
   id: string;
@@ -26,6 +27,7 @@ export default function CoordenadorEmpreendimentosModal({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [saveConfirm, setSaveConfirm] = useState(false);
 
   // Buscar todos os empreendimentos ativos + os atribuídos ao coordenador
   const fetchData = useCallback(async () => {
@@ -77,7 +79,12 @@ export default function CoordenadorEmpreendimentosModal({
     setSelectedIds(new Set());
   };
 
-  const handleSave = async () => {
+  const handleSave = () => {
+    setSaveConfirm(true);
+  };
+
+  const executeSave = async () => {
+    setSaveConfirm(false);
     try {
       setSaving(true);
       const res = await fetch("/api/admin-sistema/coordenadores/empreendimentos", {
@@ -207,6 +214,18 @@ export default function CoordenadorEmpreendimentosModal({
           </button>
         </div>
       </div>
+
+      {/* Save confirmation */}
+      <ConfirmDialog
+        open={saveConfirm}
+        title="Salvar empreendimentos do coordenador?"
+        description={`${coordenadorNome} terá acesso a ${selectedIds.size} empreendimento${selectedIds.size !== 1 ? "s" : ""}. A lista de acesso atual será substituída.`}
+        confirmLabel="Salvar"
+        variant="warning"
+        onConfirm={executeSave}
+        onCancel={() => setSaveConfirm(false)}
+        loading={saving}
+      />
     </div>
   );
 }

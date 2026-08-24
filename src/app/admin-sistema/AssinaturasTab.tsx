@@ -80,6 +80,7 @@ function AssinaturasTab({
   const [showPlanoDialog, setShowPlanoDialog] = useState(false);
   const [planoForm, setPlanoForm] = useState<PlanoFormState>(EMPTY_PLANO_FORM);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [savePlanoConfirm, setSavePlanoConfirm] = useState(false);
 
   // Ativação manual de assinatura
   const [showActivateDialog, setShowActivateDialog] = useState(false);
@@ -242,6 +243,16 @@ function AssinaturasTab({
       addToast("error", "Preencha nome, preço e período.");
       return;
     }
+    // For existing planos, show confirmation first
+    if (planoForm.id) {
+      setSavePlanoConfirm(true);
+      return;
+    }
+    await executePlanoSave();
+  };
+
+  const executePlanoSave = async () => {
+    setSavePlanoConfirm(false);
     const features = planoForm.features.split(",").map((f) => f.trim()).filter(Boolean);
     const payload: Record<string, unknown> = {
       nome: planoForm.nome.trim(), descricao: planoForm.descricao.trim(),
@@ -640,6 +651,18 @@ function AssinaturasTab({
         onConfirm={handleFixLegacy}
         onCancel={() => setFixLegacyConfirm(false)}
         loading={fixLegacyLoading}
+      />
+
+      {/* ── Save Plano confirmation (edit only) ── */}
+      <ConfirmDialog
+        open={savePlanoConfirm}
+        title="Salvar alterações no plano?"
+        description={`As informações do plano "${planoForm.nome}" serão atualizadas. Se o preço ou período foram alterados, a sincronização com o Mercado Pago será desfeita e deverá ser feita novamente.`}
+        confirmLabel="Salvar alterações"
+        variant="warning"
+        onConfirm={executePlanoSave}
+        onCancel={() => setSavePlanoConfirm(false)}
+        loading={savingPlano}
       />
     </div>
   );

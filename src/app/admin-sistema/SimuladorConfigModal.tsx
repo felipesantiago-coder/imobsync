@@ -50,6 +50,7 @@ export default function SimuladorConfigModal({
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [saveConfirm, setSaveConfirm] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [existingConfig, setExistingConfig] = useState(false);
@@ -121,7 +122,13 @@ export default function SimuladorConfigModal({
     setSuccess("");
   };
 
-  const handleSave = async () => {
+  const handleSave = () => {
+    // Show confirmation before saving
+    setSaveConfirm(true);
+  };
+
+  const executeSave = async () => {
+    setSaveConfirm(false);
     setSaving(true);
     setError("");
     setSuccess("");
@@ -444,6 +451,23 @@ export default function SimuladorConfigModal({
         onConfirm={handleDelete}
         onCancel={() => setDeleteConfirm(false)}
         loading={deleting}
+      />
+
+      {/* Save confirmation */}
+      <ConfirmDialog
+        open={saveConfirm}
+        title={existingConfig ? "Atualizar configuração do simulador?" : "Salvar configuração do simulador?"}
+        description={isLegacy && !existingConfig
+          ? `Ao salvar, o simulador original de "${empreendimentoNome}" será substituído pelo novo simulador parametrizado. Esta ação não pode ser desfeita automaticamente — será necessário excluir a configuração para voltar ao simulador original.`
+          : existingConfig
+            ? `As configurações do simulador de "${empreendimentoNome}" serão atualizadas.`
+            : `Um novo simulador parametrizado será criado para "${empreendimentoNome}".`
+        }
+        confirmLabel={existingConfig ? "Atualizar" : "Salvar"}
+        variant={isLegacy && !existingConfig ? "danger" : "warning"}
+        onConfirm={executeSave}
+        onCancel={() => setSaveConfirm(false)}
+        loading={saving}
       />
     </div>
   );

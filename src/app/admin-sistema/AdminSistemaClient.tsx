@@ -451,6 +451,20 @@ export default function AdminSistemaClient() {
   };
 
   // ─── Image upload ──────────────────────────────────────────────────────────
+  const handleImageUploadRequest = (empId: string, empNome: string) => {
+    setConfirmAction({
+      title: "Substituir imagem do empreendimento?",
+      description: `A imagem atual de "${empNome}" será substituída pela nova imagem. Deseja continuar?`,
+      confirmLabel: "Selecionar imagem",
+      variant: "default",
+      onConfirm: () => {
+        setConfirmAction(null);
+        // Use setTimeout to ensure the confirm dialog closes before opening file picker
+        setTimeout(() => handleImageUpload(empId), 100);
+      },
+    });
+  };
+
   const handleImageUpload = async (empId: string) => {
     const input = document.createElement("input");
     input.type = "file";
@@ -487,6 +501,19 @@ export default function AdminSistemaClient() {
   };
 
   // ─── Excel upload ──────────────────────────────────────────────────────────
+  const handleExcelUploadRequest = (empId: string, empNome: string) => {
+    setConfirmAction({
+      title: "Upload de planilha Excel?",
+      description: `As unidades de "${empNome}" serão atualizadas com os dados da planilha. Unidades existentes podem ser inseridas, atualizadas ou ignoradas conforme os dados.`,
+      confirmLabel: "Selecionar arquivo",
+      variant: "warning",
+      onConfirm: () => {
+        setConfirmAction(null);
+        setTimeout(() => handleExcelUpload(empId), 100);
+      },
+    });
+  };
+
   const handleExcelUpload = async (empId: string) => {
     const input = document.createElement("input");
     input.type = "file";
@@ -852,7 +879,7 @@ export default function AdminSistemaClient() {
                     <div className="mt-4 flex flex-wrap gap-2">
                       {/* Upload image */}
                       <button
-                        onClick={() => handleImageUpload(emp.id)}
+                        onClick={() => handleImageUploadRequest(emp.id, emp.nome)}
                         disabled={uploadingImage[emp.id]}
                         className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                       >
@@ -866,7 +893,7 @@ export default function AdminSistemaClient() {
 
                       {/* Upload Excel */}
                       <button
-                        onClick={() => handleExcelUpload(emp.id)}
+                        onClick={() => handleExcelUploadRequest(emp.id, emp.nome)}
                         disabled={uploadingExcel[emp.id]}
                         className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                       >

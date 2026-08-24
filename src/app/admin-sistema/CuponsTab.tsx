@@ -47,6 +47,7 @@ function CuponsTab({ addToast, planosAdmin }: CuponsTabProps) {
   const [deleting, setDeleting] = useState(false);
   const [togglingAtivo, setTogglingAtivo] = useState<string | null>(null);
   const [toggleConfirm, setToggleConfirm] = useState<{ id: string; ativo: boolean; codigo: string } | null>(null);
+  const [saveConfirm, setSaveConfirm] = useState(false);
 
   const fetchCupons = useCallback(async () => {
     try {
@@ -94,6 +95,18 @@ function CuponsTab({ addToast, planosAdmin }: CuponsTabProps) {
       addToast("error", "Preencha código e valor do desconto.");
       return;
     }
+    // For existing cupons, show confirmation first
+    if (form.id) {
+      setSaveConfirm(true);
+      return;
+    }
+    await executeSave();
+  };
+
+  const executeSave = async () => {
+    setSaveConfirm(false);
+    const codigo = form.codigo.trim();
+    const valor = parseFloat(form.valor_desconto.replace(",", "."));
     setSaving(true);
     try {
       const isEdit = !!form.id;
@@ -392,6 +405,18 @@ function CuponsTab({ addToast, planosAdmin }: CuponsTabProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── Save confirmation Dialog (edit only) ── */}
+      <ConfirmDialog
+        open={saveConfirm}
+        title="Salvar alterações no cupom?"
+        description={`O cupom "${form.codigo}" será atualizado com os novos dados informados.`}
+        confirmLabel="Salvar alterações"
+        variant="warning"
+        onConfirm={executeSave}
+        onCancel={() => setSaveConfirm(false)}
+        loading={saving}
+      />
     </div>
   );
 }
