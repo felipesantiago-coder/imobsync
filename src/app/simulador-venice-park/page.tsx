@@ -235,7 +235,7 @@ function SimulatorContent() {
         sPaid += semesterVal;
         const inccFactorForMonth = inccMonthlyRate > 0 ? Math.pow(1 + inccMonthlyRate / 100, month) : 1;
         semesterRows.push({
-          parcela: `${sCount}/${maxS}`,
+          parcela: `${sCount}/${sInstallments}`,
           data: formatDateBR(addMonthsToDate(dpDate, month)),
           valor: formatBRL(semesterVal * inccFactorForMonth),
         });
