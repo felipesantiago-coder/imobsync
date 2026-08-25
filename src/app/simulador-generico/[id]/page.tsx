@@ -8,6 +8,7 @@ import React, {
   Suspense,
 } from "react";
 import { useParams, useSearchParams } from "next/navigation";
+import { useTrackEvent } from "@/hooks/useTrackEvent";
 import {
   Building2,
   Calculator,
@@ -224,6 +225,7 @@ function SimulatorContent() {
   const [unicaValueInput, setUnicaValueInput] = useState("");
   const [activeTab, setActiveTab] = useState<TabKey>("sinal");
   const [showResults, setShowResults] = useState(false);
+  const track = useTrackEvent();
 
   // Optional installment expansion state
   const [expandedOptional, setExpandedOptional] = useState<Set<string>>(
@@ -700,7 +702,10 @@ function SimulatorContent() {
   ]);
 
   useEffect(() => {
-    if (propertyValue > 0 && config) setShowResults(true);
+    if (propertyValue > 0 && config) {
+      setShowResults(true);
+      track({ event_type: "simulador_calculate", resource_type: "empreendimento", metadata: { empreendimento: empreendimento?.slug || "", unidade: unitName, valor_imovel: result.finalPropertyValue, captacao_percent: result.captationPercent } });
+    }
   }, [result, propertyValue, config]);
 
   const handleCurrencyInput =
@@ -797,6 +802,7 @@ function SimulatorContent() {
 
   // ── PDF Generation ──
   const generatePDF = useCallback(async () => {
+    track({ event_type: "simulador_export_pdf", resource_type: "empreendimento", metadata: { empreendimento: empreendimento?.slug || "", unidade: unitName } });
     const { jsPDF } = await import("jspdf");
     const autoTableModule = await import("jspdf-autotable");
     const autoTable = autoTableModule.default || autoTableModule;

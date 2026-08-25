@@ -25,6 +25,7 @@ import { Badge } from "@/components/ui/badge";
 import MobileMenu from "@/components/MobileMenu";
 import { createClient } from "@/lib/supabase/client";
 import ConfirmDialog from "@/components/confirm-dialog";
+import { useTrackEvent } from "@/hooks/useTrackEvent";
 
 // ─── Interfaces ───
 interface ProjetoUnit {
@@ -986,6 +987,7 @@ export default function DynamicDashboard({
   simuladorUrl,
 }: DynamicDashboardProps) {
   const router = useRouter();
+  const track = useTrackEvent();
   const [units, setUnits] = useState<ProjetoUnit[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedUnit, setSelectedUnit] = useState<ProjetoUnit | null>(null);
@@ -1029,6 +1031,12 @@ export default function DynamicDashboard({
     );
     return [...set].sort((a, b) => a - b);
   }, [units]);
+
+  // ─── Dashboard view tracking ───
+  useEffect(() => {
+    track({ event_type: "dashboard_view", resource_type: "empreendimento", metadata: { empreendimento: empreendimentoNome } });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ─── Auto-detect which filters to show ───
   const showTipologiaFilter = availableTipologias.length > 1;

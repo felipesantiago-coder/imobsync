@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireReadAccess, requireWriteAccess } from "@/lib/api-auth";
+import { trackUnitStatusChange } from "@/lib/analytics";
 
 export async function GET() {
   try {
@@ -53,6 +54,17 @@ export async function PATCH(request: NextRequest) {
       updates.status = status;
     }
 
+    // Fetch old unit data before update
+    let oldUnit: { id?: string; status?: string } | null = null;
+    if (status !== undefined) {
+      const { data: old } = await supabase
+        .from("moment_units")
+        .select("id, status")
+        .eq("unidade", unidade)
+        .single();
+      oldUnit = old;
+    }
+
     if (valor_venda !== undefined) {
       updates.valor_venda = valor_venda === null ? null : Number(valor_venda);
     }
@@ -74,6 +86,26 @@ export async function PATCH(request: NextRequest) {
     if (error) {
       console.error("Erro ao atualizar:", error.message);
       return NextResponse.json({ error: "Erro ao atualizar unidade" }, { status: 500 });
+    }
+
+    // Track status change (fire-and-forget)
+    if (status !== undefined && oldUnit) {
+      try {
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        const { data: profile } = await supabase.from("profiles").select("role").eq("id", authUser?.id).maybeSingle();
+        if (authUser) {
+          trackUnitStatusChange({
+            unitId: data.id,
+            empreendimentoId: "moment",
+            unidade: String(unidade),
+            bloco: "",
+            statusAnterior: oldUnit.status ?? null,
+            statusNovo: status,
+            changedBy: authUser.id,
+            changedByRole: (profile as Record<string, unknown>)?.role as string || "admin",
+          });
+        }
+      } catch { /* fire-and-forget */ }
     }
 
     return NextResponse.json(data);

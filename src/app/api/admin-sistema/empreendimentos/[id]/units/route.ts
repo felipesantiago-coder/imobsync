@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireReadAccess } from "@/lib/api-auth";
 import { coordenadorHasAccess } from "@/lib/coordinator-access";
+import { trackUnitStatusChange } from "@/lib/analytics";
 
 export const dynamic = "force-dynamic";
 
@@ -104,6 +105,14 @@ export async function PATCH(
       return NextResponse.json({ error: "Empreendimento não encontrado" }, { status: 404 });
     }
 
+    // Fetch old unit data before update
+    const { data: oldUnit } = await supabase
+      .from("projeto_units")
+      .select("id, status, bloco, empreendimento_id")
+      .eq("empreendimento_id", id)
+      .eq("unidade", unidade)
+      .single();
+
     const { data, error: updateErr } = await supabase
       .from("projeto_units")
       .update({ status })
@@ -115,6 +124,20 @@ export async function PATCH(
     if (updateErr) {
       console.error("Erro ao atualizar status:", updateErr.message);
       return NextResponse.json({ error: "Erro ao atualizar unidade" }, { status: 500 });
+    }
+
+    // Track status change (fire-and-forget)
+    if (user) {
+      trackUnitStatusChange({
+        unitId: data.id,
+        empreendimentoId: id,
+        unidade: String(unidade),
+        bloco: data.bloco || "",
+        statusAnterior: oldUnit?.status ?? null,
+        statusNovo: status,
+        changedBy: user.id,
+        changedByRole: role || "unknown",
+      });
     }
 
     return NextResponse.json(data);

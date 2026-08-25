@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireReadAccess, requireWriteAccess } from "@/lib/api-auth";
+import { trackUnitStatusChange } from "@/lib/analytics";
 
 export async function GET() {
   try {
@@ -73,6 +74,21 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
+    // Fetch old unit data before update (only if status is changing)
+    let oldUnit: { id?: string; status?: string } | null = null;
+    if (status !== undefined) {
+      let oldQuery = supabase
+        .from("vitta_units")
+        .select("id, status")
+        .eq("bloco", bloco)
+        .eq("unidade", unidade);
+      if (andar) {
+        oldQuery = oldQuery.eq("andar", andar) as any;
+      }
+      const { data: old } = await oldQuery.single();
+      oldUnit = old;
+    }
+
     let query = supabase
       .from("vitta_units")
       .update(updates)
@@ -88,6 +104,26 @@ export async function PATCH(request: NextRequest) {
     if (error) {
       console.error("Erro ao atualizar unidade Vitta:", error.message);
       return NextResponse.json({ error: "Erro ao atualizar unidade" }, { status: 500 });
+    }
+
+    // Track status change (fire-and-forget)
+    if (status !== undefined && oldUnit) {
+      try {
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        const { data: profile } = await supabase.from("profiles").select("role").eq("id", authUser?.id).maybeSingle();
+        if (authUser) {
+          trackUnitStatusChange({
+            unitId: data.id,
+            empreendimentoId: "vitta",
+            unidade: String(unidade),
+            bloco: String(bloco),
+            statusAnterior: oldUnit.status ?? null,
+            statusNovo: status,
+            changedBy: authUser.id,
+            changedByRole: (profile as Record<string, unknown>)?.role as string || "admin",
+          });
+        }
+      } catch { /* fire-and-forget */ }
     }
 
     return NextResponse.json(data);

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import { useTrackEvent } from "@/hooks/useTrackEvent";
 import {
   Building2,
   Calculator,
@@ -145,6 +146,7 @@ function SimulatorContent() {
   const [maxSemester, setMaxSemester] = useState("6");
   const [activeTab, setActiveTab] = useState<"sinal" | "mensal" | "semestral" | "unica" | "habitese">("sinal");
   const [showResults, setShowResults] = useState(false);
+  const track = useTrackEvent();
 
   // INCC state
   const [inccMode, setInccMode] = useState<InccMode>("none");
@@ -320,7 +322,10 @@ function SimulatorContent() {
 
   // Auto-calculate
   useEffect(() => {
-    if (propertyValue > 0) setShowResults(true);
+    if (propertyValue > 0) {
+      setShowResults(true);
+      track({ event_type: "simulador_calculate", resource_type: "empreendimento", metadata: { empreendimento: "quattre-istambul", unidade: unitName, valor_imovel: result.finalPropertyValue, captacao_percent: result.captationPercent } });
+    }
   }, [result]);
 
   // Fetch INCC data
@@ -368,6 +373,7 @@ function SimulatorContent() {
 
   // PDF generation
   const generatePDF = useCallback(async () => {
+    track({ event_type: "simulador_export_pdf", resource_type: "empreendimento", metadata: { empreendimento: "quattre-istambul", unidade: unitName } });
     const { jsPDF } = await import("jspdf");
     const autoTableModule = await import("jspdf-autotable");
     const autoTable = autoTableModule.default || autoTableModule;

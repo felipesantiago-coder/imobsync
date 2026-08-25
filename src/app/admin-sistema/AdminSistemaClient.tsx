@@ -24,6 +24,7 @@ import {
   Eye,
   EyeOff,
   Calculator,
+  BarChart3,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ConfirmDialog from "@/components/confirm-dialog";
@@ -33,10 +34,11 @@ import { createClient } from "@/lib/supabase/client";
 // Code-split heavy tab components — only loaded when the tab is active
 const AssinaturasTab = dynamic(() => import("./AssinaturasTab"), { ssr: false });
 const CuponsTab = dynamic(() => import("./CuponsTab"), { ssr: false });
+const MetricasTab = dynamic(() => import("./MetricasTab"), { ssr: false });
 const CoordenadorEmpreendimentosModal = dynamic(() => import("@/components/CoordenadorEmpreendimentosModal"), { ssr: false });
 const SimuladorConfigModal = dynamic(() => import("./SimuladorConfigModal"), { ssr: false });
 
-type AdminTab = "empreendimentos" | "usuarios" | "assinaturas" | "cupons";
+type AdminTab = "empreendimentos" | "usuarios" | "assinaturas" | "cupons" | "metricas";
 
 interface UserProfile {
   id: string;
@@ -656,7 +658,7 @@ export default function AdminSistemaClient() {
               <div>
                 <h1 className="text-lg font-bold tracking-tight">Administração do <span className="text-gray-400 font-normal">Sistema</span></h1>
                 <p className="text-[11px] text-gray-400 font-medium hidden sm:block">
-                  {activeTab === "empreendimentos" ? "Gerenciar empreendimentos" : activeTab === "usuarios" ? "Gerenciar usuários" : activeTab === "assinaturas" ? "Gerenciar assinaturas e planos" : "Gerenciar cupons de desconto"}
+                  {activeTab === "empreendimentos" ? "Gerenciar empreendimentos" : activeTab === "usuarios" ? "Gerenciar usuários" : activeTab === "assinaturas" ? "Gerenciar assinaturas e planos" : activeTab === "cupons" ? "Gerenciar cupons de desconto" : "Métricas de uso do sistema"}
                 </p>
               </div>
             </div>
@@ -738,6 +740,17 @@ export default function AdminSistemaClient() {
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" x2="7.01" y1="7" y2="7"/></svg>
               Cupons
+            </button>
+            <button
+              onClick={() => setActiveTab("metricas")}
+              className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${
+                activeTab === "metricas"
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              <BarChart3 className="w-4 h-4" />
+              Métricas
             </button>
           </div>
         </div>
@@ -1136,6 +1149,9 @@ export default function AdminSistemaClient() {
 
         {/* ═══ TAB: Cupons ═══ */}
         {activeTab === "cupons" && <CuponsTab addToast={addToast} planosAdmin={planosAdmin} />}
+
+        {/* ═══ TAB: Métricas ═══ */}
+        {activeTab === "metricas" && <MetricasTab addToast={addToast} />}
       </main>
 
       {/* ── Footer ─────────────────────────────────────────────────────── */}

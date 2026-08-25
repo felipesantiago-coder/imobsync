@@ -18,6 +18,7 @@ import MobileMenu from "@/components/MobileMenu";
 import { createClient } from "@/lib/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import ConfirmDialog from "@/components/confirm-dialog";
+import { useTrackEvent } from "@/hooks/useTrackEvent";
 
 // ─── Color palette for tipologias ───
 type TipologiaKey = VillaBiancoUnit["tipologia"];
@@ -738,6 +739,7 @@ const BatchActionBar = memo(function BatchActionBar({
 // ─── Main Dashboard ───
 export default function VillaBiancoDashboard({ isAdmin = false, isCoordinator = false, hideHeader = false }: { isAdmin?: boolean; isCoordinator?: boolean; hideHeader?: boolean }) {
   const router = useRouter();
+  const track = useTrackEvent();
   const [units, setUnits] = useState<VillaBiancoUnit[]>(staticUnits);
   const [selectedUnit, setSelectedUnit] = useState<VillaBiancoUnit | null>(null);
   const [collapsedBlocks, setCollapsedBlocks] = useState<Set<VillaBiancoBloco>>(new Set());
@@ -751,6 +753,12 @@ export default function VillaBiancoDashboard({ isAdmin = false, isCoordinator = 
   const [selectedForBatch, setSelectedForBatch] = useState<Set<string>>(new Set());
   const [batchSaving, setBatchSaving] = useState(false);
   const [batchConfirmStatus, setBatchConfirmStatus] = useState<VillaBiancoUnit["status"] | null>(null);
+
+  // ─── Dashboard view tracking ───
+  useEffect(() => {
+    track({ event_type: "dashboard_view", resource_type: "empreendimento", metadata: { empreendimento: "villa-bianco" } });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Buscar dados do Supabase via API + Realtime
   useEffect(() => {

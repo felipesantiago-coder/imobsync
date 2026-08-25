@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import { useTrackEvent } from "@/hooks/useTrackEvent";
 import {
   Building2,
   Calculator,
@@ -123,6 +124,7 @@ function SimulatorContent() {
   const [semesterValueInput, setSemesterValueInput] = useState("");
   const [activeTab, setActiveTab] = useState<"sinal" | "mensal" | "semestral" | "decoracao" | "habitese">("sinal");
   const [showResults, setShowResults] = useState(false);
+  const track = useTrackEvent();
 
   // INCC state
   const [inccMode, setInccMode] = useState<InccMode>("none");
@@ -228,7 +230,12 @@ function SimulatorContent() {
   }, [propertyValue, discount, downPaymentValue, downPaymentDate, monthlyVal, semesterVal, finalPropertyValue, inccMonthlyRate, inccMode]);
 
   useEffect(() => { setShowResults(propertyValue > 0); }, [propertyValue]);
-  useEffect(() => { if (propertyValue > 0) setShowResults(true); }, [result]);
+  useEffect(() => {
+    if (propertyValue > 0) {
+      setShowResults(true);
+      track({ event_type: "simulador_calculate", resource_type: "empreendimento", metadata: { empreendimento: "moment", unidade: unitName, valor_imovel: result.finalPropertyValue, captacao_percent: result.captationPercent } });
+    }
+  }, [result]);
 
   // Fetch INCC data
   useEffect(() => {
@@ -266,6 +273,7 @@ function SimulatorContent() {
   };
 
   const generatePDF = useCallback(async () => {
+    track({ event_type: "simulador_export_pdf", resource_type: "empreendimento", metadata: { empreendimento: "moment", unidade: unitName } });
     const { jsPDF } = await import("jspdf");
     const autoTableModule = await import("jspdf-autotable");
     const autoTable = autoTableModule.default || autoTableModule;

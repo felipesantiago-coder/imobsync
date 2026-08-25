@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireReadAccess, requireWriteAccess } from "@/lib/api-auth";
+import { trackUnitStatusChange } from "@/lib/analytics";
 
 export async function GET() {
   try {
@@ -46,6 +47,14 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: `Status inválido. Valores: ${validStatuses.join(", ")}` }, { status: 400 });
     }
 
+    // Fetch old unit data before update
+    const { data: oldUnit } = await supabase
+      .from("villa_bianco_units")
+      .select("id, status")
+      .eq("bloco", bloco)
+      .eq("unidade", unidade)
+      .single();
+
     const { data, error } = await supabase
       .from("villa_bianco_units")
       .update({ status })
@@ -58,6 +67,24 @@ export async function PATCH(request: NextRequest) {
       console.error("Erro ao atualizar:", error.message);
       return NextResponse.json({ error: "Erro ao atualizar unidade" }, { status: 500 });
     }
+
+    // Track status change (fire-and-forget)
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      const { data: profile } = await supabase.from("profiles").select("role").eq("id", authUser?.id).maybeSingle();
+      if (authUser) {
+        trackUnitStatusChange({
+          unitId: data.id,
+          empreendimentoId: "villa-bianco",
+          unidade: String(unidade),
+          bloco: String(bloco),
+          statusAnterior: oldUnit?.status ?? null,
+          statusNovo: status,
+          changedBy: authUser.id,
+          changedByRole: (profile as Record<string, unknown>)?.role as string || "admin",
+        });
+      }
+    } catch { /* fire-and-forget */ }
 
     return NextResponse.json(data);
   } catch (err) {

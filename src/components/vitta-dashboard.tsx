@@ -18,6 +18,7 @@ import MobileMenu from "@/components/MobileMenu";
 import { createClient } from "@/lib/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import ConfirmDialog from "@/components/confirm-dialog";
+import { useTrackEvent } from "@/hooks/useTrackEvent";
 
 // ─── Color palette for tipos ───
 type TipoKey = VittaUnit["tipo"];
@@ -609,6 +610,7 @@ const BatchActionBar = memo(function BatchActionBar({
 // ─── Main Dashboard ───
 export default function VittaDashboard({ isAdmin = false, isCoordinator = false, hideHeader = false }: { isAdmin?: boolean; isCoordinator?: boolean; hideHeader?: boolean }) {
   const router = useRouter();
+  const track = useTrackEvent();
   const [units, setUnits] = useState<VittaUnit[]>(staticUnits);
   const [selectedUnit, setSelectedUnit] = useState<VittaUnit | null>(null);
   const [collapsedFloors, setCollapsedFloors] = useState<Set<string>>(new Set());
@@ -621,6 +623,12 @@ export default function VittaDashboard({ isAdmin = false, isCoordinator = false,
   const [selectedForBatch, setSelectedForBatch] = useState<Set<string>>(new Set());
   const [batchSaving, setBatchSaving] = useState(false);
   const [batchConfirmStatus, setBatchConfirmStatus] = useState<VittaUnit["status"] | null>(null);
+
+  // ─── Dashboard view tracking ───
+  useEffect(() => {
+    track({ event_type: "dashboard_view", resource_type: "empreendimento", metadata: { empreendimento: "vitta" } });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Carregar unidades do banco (fallback para dados estáticos)
   useEffect(() => {
