@@ -1362,7 +1362,7 @@ function SimulatorContent() {
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
               <img
-                src="/imobsync-icon-escuro-36.png"
+                src="/imobsync-icon-claro-36.png"
                 alt="ImobSync"
                 className="h-10 w-auto rounded-xl"
               />
