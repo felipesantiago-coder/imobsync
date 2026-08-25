@@ -1,8 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { X, Loader2, Building2, CheckSquare, Square, Check } from "lucide-react";
-import ConfirmDialog from "@/components/confirm-dialog";
+import { X, Loader2, Building2, CheckSquare, Square, Check, AlertTriangle } from "lucide-react";
 
 interface Empreendimento {
   id: string;
@@ -216,16 +215,40 @@ export default function CoordenadorEmpreendimentosModal({
       </div>
 
       {/* Save confirmation */}
-      <ConfirmDialog
-        open={saveConfirm}
-        title="Salvar empreendimentos do coordenador?"
-        description={`${coordenadorNome} terá acesso a ${selectedIds.size} empreendimento${selectedIds.size !== 1 ? "s" : ""}. A lista de acesso atual será substituída.`}
-        confirmLabel="Salvar"
-        variant="warning"
-        onConfirm={executeSave}
-        onCancel={() => setSaveConfirm(false)}
-        loading={saving}
-      />
+      {saveConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setSaveConfirm(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <div className="flex items-start gap-4">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-amber-100 text-amber-600">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-bold text-gray-900 mb-1">Salvar empreendimentos do coordenador?</h3>
+                <p className="text-sm text-gray-600 leading-relaxed">
+                  {coordenadorNome} terá acesso a {selectedIds.size} empreendimento{selectedIds.size !== 1 ? "s" : ""}. A lista de acesso atual será substituída.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 mt-6">
+              <button
+                onClick={() => setSaveConfirm(false)}
+                disabled={saving}
+                className="px-4 py-2.5 rounded-xl text-xs font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 transition-all disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={executeSave}
+                disabled={saving}
+                className="px-4 py-2.5 rounded-xl text-xs font-semibold transition-all disabled:opacity-50 shadow-md bg-amber-500 text-white hover:bg-amber-600"
+              >
+                {saving ? "Aguarde..." : "Salvar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
