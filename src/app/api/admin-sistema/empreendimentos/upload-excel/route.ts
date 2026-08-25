@@ -347,12 +347,17 @@ export async function POST(request: NextRequest) {
       .select("*")
       .eq("empreendimento_id", empreendimentoId);
 
-    // Indexar por nome da unidade para lookup rápido
+    // Indexar por (bloco + unidade) para lookup rápido — unidades com mesmo
+    // número em blocos diferentes devem ser tratadas como registros distintos.
     const existingMap = new Map<string, Record<string, unknown>>();
     if (existingUnits) {
       for (const eu of existingUnits) {
-        const key = String(eu.unidade ?? "").trim().toLowerCase();
-        if (key) existingMap.set(key, eu as Record<string, unknown>);
+        const bloco = String((eu as Record<string, unknown>).bloco ?? "").trim();
+        const unidade = String(eu.unidade ?? "").trim();
+        if (unidade) {
+          const key = `${bloco.toLowerCase()}|${unidade.toLowerCase()}`;
+          existingMap.set(key, eu as Record<string, unknown>);
+        }
       }
     }
 
@@ -376,9 +381,10 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      // Merge com dados existentes (se a unidade já existe)
+      // Merge com dados existentes (se a unidade já existe no mesmo bloco)
       let unitToSave: Record<string, unknown>;
-      const existing = existingMap.get(unitName.toLowerCase());
+      const blocoKey = String(partial.bloco ?? "").trim().toLowerCase();
+      const existing = existingMap.get(`${blocoKey}|${unitName.toLowerCase()}`);
 
       if (existing && isPartialUpdate) {
         // Atualização parcial: preserva tudo que não veio no Excel
@@ -389,11 +395,14 @@ export async function POST(request: NextRequest) {
         unitToSave = partial;
       }
 
-      // Upsert na tabela genérica: se já existir (empreendimento_id + unidade), atualiza; senão insere
+      // Garantir que bloco nunca seja null (necessário para unique constraint)
+      if (!unitToSave.bloco) unitToSave.bloco = "";
+
+      // Upsert na tabela genérica: se já existir (empreendimento_id + bloco + unidade), atualiza; senão insere
       const { error: upsertErr } = await supabase
         .from("projeto_units")
         .upsert(unitToSave, {
-          onConflict: "empreendimento_id,unidade",
+          onConflict: "empreendimento_id,bloco,unidade",
           count: "exact",
         });
 
