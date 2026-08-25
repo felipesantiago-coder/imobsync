@@ -21,6 +21,7 @@ import {
 const DELIVERY_YEAR = 2027;
 const DELIVERY_MONTH = 9; // October (0-indexed: Jan=0, Feb=1, ..., Oct=9)
 const DECORATION_FEE = 10000.00;
+const MIN_CAPTATION_PERCENT = 15;
 
 // ─── Utility Functions ───
 function formatBRL(value: number): string {
@@ -258,7 +259,7 @@ function SimulatorContent() {
       monthlyRows,
       semesterRows,
       decorationRows,
-      isLowCaptation: captPct > 0 && captPct < 15,
+      isLowCaptation: captPct > 0 && captPct < MIN_CAPTATION_PERCENT,
       inccMonthlyRate,
       inccCorrectionFactor,
       inccAccumulatedPercent,
@@ -783,7 +784,7 @@ function SimulatorContent() {
                 {result.isLowCaptation && showResults && (
                   <div className="flex items-center gap-3 p-4 rounded-xl bg-red-50 border border-red-200 text-red-700">
                     <AlertTriangle className="w-5 h-5 flex-shrink-0" />
-                    <span className="font-bold text-sm">Captação abaixo de 15% não é permitida!</span>
+                    <span className="font-bold text-sm">Captação abaixo de {MIN_CAPTATION_PERCENT}% não é permitida!</span>
                   </div>
                 )}
 
@@ -812,7 +813,7 @@ function SimulatorContent() {
                   <span className="text-white font-bold">{result.captationPercent.toFixed(2)}%</span>
                 </div>
                 <div className="w-full h-2.5 rounded-full bg-white/10 overflow-hidden">
-                  <div className={`h-full rounded-full transition-all duration-500 ${result.captationPercent >= 50 ? "bg-emerald-400" : result.isLowCaptation ? "bg-red-400" : "bg-amber-400"}`} style={{ width: `${Math.min(result.captationPercent, 100)}%` }} />
+                  <div className={`h-full rounded-full transition-all duration-500 ${result.captationPercent >= MIN_CAPTATION_PERCENT ? "bg-emerald-400" : result.captationPercent >= MIN_CAPTATION_PERCENT - 5 ? "bg-amber-400" : "bg-red-400"}`} style={{ width: `${Math.min(result.captationPercent, 100)}%` }} />
                 </div>
               </div>
 

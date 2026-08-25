@@ -652,7 +652,7 @@ function SimulatorContent() {
       semesterRemaining: sRemaining,
       annualRemaining: aRemaining,
       habiteseBalance: hBalance,
-      isLowCaptation: captPct > 0 && captPct < 25,
+      isLowCaptation: captPct > 0 && captPct < (config?.percentual_captacao || 25),
       inccMonthlyRate,
       inccCorrectionFactor,
       inccAccumulatedPercent,
@@ -2064,7 +2064,7 @@ function SimulatorContent() {
                   <div className="flex items-center gap-3 p-4 rounded-xl bg-red-50 border border-red-200 text-red-700">
                     <AlertTriangle className="w-5 h-5 flex-shrink-0" />
                     <span className="font-bold text-sm">
-                      Captação abaixo de 25% não é permitida!
+                      Captação abaixo de {config?.percentual_captacao || 25}% não é permitida!
                     </span>
                   </div>
                 )}
@@ -2120,7 +2120,7 @@ function SimulatorContent() {
                 </div>
                 <div className="w-full h-2.5 rounded-full bg-white/10 overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all duration-500 ${result.captationPercent >= 50 ? "bg-emerald-400" : result.isLowCaptation ? "bg-red-400" : "bg-amber-400"}`}
+                    className={`h-full rounded-full transition-all duration-500 ${result.captationPercent >= (config?.percentual_captacao || 25) ? "bg-emerald-400" : result.captationPercent >= (config?.percentual_captacao || 25) - 5 ? "bg-amber-400" : "bg-red-400"}`}
                     style={{
                       width: `${Math.min(result.captationPercent, 100)}%`,
                     }}

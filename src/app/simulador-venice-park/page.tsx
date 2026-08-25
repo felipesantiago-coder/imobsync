@@ -981,13 +981,13 @@ function SimulatorContent() {
                 <div className="w-full h-2.5 rounded-full bg-white/10 overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all duration-500 ${
-                      result.captationPercent >= 50 ? "bg-emerald-400" : result.isLowCaptation ? "bg-red-400" : "bg-amber-400"
+                      result.captationPercent >= MIN_CAPTATION_PERCENT ? "bg-emerald-400" : result.captationPercent >= MIN_CAPTATION_PERCENT - 5 ? "bg-amber-400" : "bg-red-400"
                     }`}
                     style={{ width: `${Math.min(result.captationPercent, 100)}%` }}
                   />
                 </div>
                 {result.captationPercent > 0 && result.captationPercent < MIN_CAPTATION_PERCENT && (
-                  <p className="text-red-300 text-xs mt-2 text-right">Mínimo: {MIN_CAPTATION_PERCENT}%</p>
+                  <p className={`text-xs mt-2 text-right ${result.captationPercent < MIN_CAPTATION_PERCENT - 5 ? "text-red-300" : "text-amber-300"}`}>Mínimo: {MIN_CAPTATION_PERCENT}%</p>
                 )}
               </div>
 
