@@ -18,25 +18,25 @@ import {
 const slides = [
   {
     type: "desktop" as const,
-    image: "/mock-desktop-01.webp",
+    image: "/mock-desktop-01.png",
     title: "Espelho de vendas atualizado em tempo real",
     desc: "Disponibilidade, status e preços de todas as unidades ao seu alcance, direto do computador.",
   },
   {
     type: "mobile" as const,
-    image: "/mock-mobile-01.webp",
+    image: "/mock-mobile-01.png",
     title: "Acesse de qualquer lugar",
     desc: "Mesmas informações completas no celular. Consulte espelhos e preços onde estiver.",
   },
   {
     type: "desktop" as const,
-    image: "/mock-desktop-02.webp",
+    image: "/mock-desktop-02.png",
     title: "Simule e gere propostas em PDF",
     desc: "Crie simulações de pagamento personalizadas e exporte a proposta pronta para envio ao cliente.",
   },
   {
     type: "mobile" as const,
-    image: "/mock-mobile-02.webp",
+    image: "/mock-mobile-02.png",
     title: "Gerencie vendas em tempo real",
     desc: "Atualize status de unidades, acompanhe reservas e feche vendas direto pelo celular.",
   },
