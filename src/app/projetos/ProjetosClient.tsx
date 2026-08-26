@@ -388,6 +388,7 @@ export default function ProjetosClient({ userRole, initialEmpreendimentos, initi
                 <SkeletonCard />
               </>
             ) : (
+              <>
                 {filteredProjects.map((project, index) => {
                   const href = getProjectHref(project);
                   const description = project.descricao
@@ -457,6 +458,7 @@ export default function ProjetosClient({ userRole, initialEmpreendimentos, initi
                     </div>
                   );
                 })}
+              </>
             )}
           </div>
 
