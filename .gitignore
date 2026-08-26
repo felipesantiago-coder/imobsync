@@ -64,7 +64,6 @@ tool-results/
 
 # Generated media (previews, mockups, proposals, brand assets)
 public/imobsync-preview.webp
-public/mock-*.webp
 public/*-preview.png
 public/*-preview.webp
 scripts/imobsync_brand/
