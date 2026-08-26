@@ -28,7 +28,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ConfirmDialog from "@/components/confirm-dialog";
-import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 
 // Code-split heavy tab components — only loaded when the tab is active
@@ -760,24 +759,20 @@ export default function AdminSistemaClient() {
         {/* Title + action */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <motion.h2
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight"
+            <h2
+              className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight animate-[fadeSlideUp_0.4s_ease-out]"
             >
               Empreendimentos
-            </motion.h2>
-            <motion.p
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.05 }}
-              className="text-sm text-gray-500 mt-1"
+            </h2>
+            <p
+              className="text-sm text-gray-500 mt-1 animate-[fadeSlideUp_0.4s_ease-out_0.05s]"
+              style={{ animationFillMode: 'both' }}
             >
               {loading ? "Carregando..." : `${empreendimentos.length} empreendimento${empreendimentos.length !== 1 ? "s" : ""} cadastrado${empreendimentos.length !== 1 ? "s" : ""}`}
-            </motion.p>
+            </p>
           </div>
 
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1 }}>
+          <div className="animate-[fadeInScale_0.3s_ease-out_0.1s]" style={{ animationFillMode: 'both' }}>
             <Button
               onClick={() => setShowCreateModal(true)}
               className="flex items-center gap-2 bg-[#0D1B2A] to-gray-700 text-white hover:from-gray-800 hover:to-gray-600 shadow-md rounded-xl h-11 px-5 text-sm font-semibold"
@@ -785,7 +780,7 @@ export default function AdminSistemaClient() {
               <Plus className="w-4 h-4" />
               Novo Empreendimento
             </Button>
-          </motion.div>
+          </div>
         </div>
 
         {/* Loading skeleton */}
@@ -806,10 +801,8 @@ export default function AdminSistemaClient() {
 
         {/* Empty state */}
         {!loading && empreendimentos.length === 0 && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="text-center py-20"
+          <div
+            className="text-center py-20 animate-[fadeIn_0.4s_ease-out]"
           >
             <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-5">
               <Building2 className="w-8 h-8 text-gray-300" />
@@ -818,22 +811,17 @@ export default function AdminSistemaClient() {
             <p className="text-sm text-gray-300 mt-1.5">
               Clique em &quot;Novo Empreendimento&quot; para começar
             </p>
-          </motion.div>
+          </div>
         )}
 
         {/* Empreendimentos grid */}
         {!loading && empreendimentos.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <AnimatePresence mode="popLayout">
               {empreendimentos.map((emp, index) => (
-                <motion.div
+                <div
                   key={emp.id}
-                  layout
-                  initial={{ opacity: 0, y: 30 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95, y: -10 }}
-                  transition={{ duration: 0.35, delay: 0.04 * index }}
-                  className="bg-white rounded-xl shadow-md border border-gray-100 overflow-hidden"
+                  className="bg-white rounded-xl shadow-md border border-gray-100 overflow-hidden animate-[fadeSlideUp_0.35s_ease-out]"
+                  style={{ animationDelay: `${0.04 * index}s`, animationFillMode: 'both' }}
                 >
                   {/* Image thumbnail */}
                   <div className="relative h-44 bg-gray-100 overflow-hidden">
@@ -946,9 +934,8 @@ export default function AdminSistemaClient() {
                       </button>
                     </div>
                   </div>
-                </motion.div>
+                </div>
               ))}
-            </AnimatePresence>
           </div>
         )}
         </>)}
@@ -1164,22 +1151,13 @@ export default function AdminSistemaClient() {
       </footer>
 
       {/* ── Delete User Confirmation Modal ──────────────────────────── */}
-      <AnimatePresence>
-        {deleteUserTarget && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-[300] bg-black/50 backdrop-blur-md flex items-center justify-center p-4"
+      {deleteUserTarget && (
+          <div
+            className="fixed inset-0 z-[300] bg-black/50 backdrop-blur-md flex items-center justify-center p-4 animate-[modalOverlayIn_0.2s_ease-out]"
             onClick={() => !deletingUser && setDeleteUserTarget(null)}
           >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              transition={{ duration: 0.25, ease: "easeOut" }}
-              className="bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-sm overflow-hidden"
+            <div
+              className="bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-sm overflow-hidden animate-[modalContentIn_0.25s_ease-out]"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
@@ -1230,28 +1208,18 @@ export default function AdminSistemaClient() {
                   )}
                 </button>
               </div>
-            </motion.div>
-          </motion.div>
+            </div>
+          </div>
         )}
-      </AnimatePresence>
 
       {/* ── Create Empreendimento Modal ─────────────────────────────────── */}
-      <AnimatePresence>
-        {showCreateModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-[300] bg-black/50 backdrop-blur-md flex items-center justify-center p-4"
+      {showCreateModal && (
+          <div
+            className="fixed inset-0 z-[300] bg-black/50 backdrop-blur-md flex items-center justify-center p-4 animate-[modalOverlayIn_0.2s_ease-out]"
             onClick={() => setShowCreateModal(false)}
           >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              transition={{ duration: 0.25, ease: "easeOut" }}
-              className="bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-md overflow-hidden"
+            <div
+              className="bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-md overflow-hidden animate-[modalContentIn_0.25s_ease-out]"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
@@ -1288,28 +1256,18 @@ export default function AdminSistemaClient() {
                   {creating ? (<><Loader2 className="w-4 h-4 animate-spin" /> Criando...</>) : (<><Check className="w-4 h-4" /> Criar Empreendimento</>)}
                 </button>
               </div>
-            </motion.div>
-          </motion.div>
+            </div>
+          </div>
         )}
-      </AnimatePresence>
 
       {/* ── Delete Confirmation Modal ───────────────────────────────────── */}
-      <AnimatePresence>
-        {deleteTarget && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-[300] bg-black/50 backdrop-blur-md flex items-center justify-center p-4"
+      {deleteTarget && (
+          <div
+            className="fixed inset-0 z-[300] bg-black/50 backdrop-blur-md flex items-center justify-center p-4 animate-[modalOverlayIn_0.2s_ease-out]"
             onClick={() => setDeleteTarget(null)}
           >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              transition={{ duration: 0.25, ease: "easeOut" }}
-              className="bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-sm overflow-hidden"
+            <div
+              className="bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-sm overflow-hidden animate-[modalContentIn_0.25s_ease-out]"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
@@ -1358,28 +1316,18 @@ export default function AdminSistemaClient() {
                   )}
                 </button>
               </div>
-            </motion.div>
-          </motion.div>
+            </div>
+          </div>
         )}
-      </AnimatePresence>
 
       {/* ── Create User Modal ────────────────────────────────────────── */}
-      <AnimatePresence>
-        {showCreateUserModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-[300] bg-black/50 backdrop-blur-md flex items-center justify-center p-4"
+      {showCreateUserModal && (
+          <div
+            className="fixed inset-0 z-[300] bg-black/50 backdrop-blur-md flex items-center justify-center p-4 animate-[modalOverlayIn_0.2s_ease-out]"
             onClick={() => setShowCreateUserModal(false)}
           >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              transition={{ duration: 0.25, ease: "easeOut" }}
-              className="bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-md overflow-hidden"
+            <div
+              className="bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-md overflow-hidden animate-[modalContentIn_0.25s_ease-out]"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
@@ -1526,10 +1474,9 @@ export default function AdminSistemaClient() {
                   </>
                 )}
               </div>
-            </motion.div>
-          </motion.div>
+            </div>
+          </div>
         )}
-      </AnimatePresence>
 
 
       {/* ── Coordenador Empreendimentos Modal ─────────────────────── */}
@@ -1568,15 +1515,10 @@ export default function AdminSistemaClient() {
 
       {/* ── Toast Notifications ─────────────────────────────────────────── */}
       <div className="fixed bottom-6 right-6 z-[400] flex flex-col gap-2 max-w-sm">
-        <AnimatePresence mode="popLayout">
           {toasts.map((toast) => (
-            <motion.div
+            <div
               key={toast.id}
-              initial={{ opacity: 0, y: 20, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, x: 50, scale: 0.95 }}
-              transition={{ duration: 0.25 }}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border backdrop-blur-sm ${
+              className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border backdrop-blur-sm animate-[toastIn_0.3s_ease-out] ${
                 toast.type === "success"
                   ? "bg-emerald-50 border-emerald-200 text-emerald-800"
                   : "bg-red-50 border-red-200 text-red-800"
@@ -1588,9 +1530,8 @@ export default function AdminSistemaClient() {
                 <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
               )}
               <p className="text-sm font-medium">{toast.message}</p>
-            </motion.div>
+            </div>
           ))}
-        </AnimatePresence>
       </div>
     </div>
   );

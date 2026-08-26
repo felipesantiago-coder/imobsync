@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
+
 import {
   Check, Loader2, CreditCard, Shield, Zap,
   Crown, CalendarDays, Clock, Star, AlertCircle,
@@ -257,11 +257,8 @@ export default function PlanosPublicClient({ planos }: PlanosPublicClientProps) 
       <main className="flex-1 w-full px-3 sm:px-4 md:px-6 lg:px-8 xl:px-10 py-3 lg:py-4 overflow-y-auto">
         <div className="max-w-5xl mx-auto">
           {/* Hero */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="text-center mb-4 lg:mb-5"
+          <div
+            className="text-center mb-4 lg:mb-5 animate-[fadeSlideUp_0.5s_ease-out]"
           >
             <div className="hidden lg:inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-100 text-amber-800 text-[11px] font-semibold mb-2">
               <Zap className="w-3.5 h-3.5" />
@@ -274,25 +271,20 @@ export default function PlanosPublicClient({ planos }: PlanosPublicClientProps) 
               Cadastre-se e pague para ter acesso completo ao espelho de vendas
               de todos os empreendimentos. Cancele quando quiser, sem multa.
             </p>
-          </motion.div>
+          </div>
 
           {/* Error banner */}
-          <AnimatePresence>
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 flex items-center gap-3"
+          {error && (
+              <div
+                className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 flex items-center gap-3 animate-[fadeSlideUp_0.3s_ease-out]"
               >
                 <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
                 <p className="text-sm text-red-700 flex-1">{error}</p>
                 <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600">
                   X
                 </button>
-              </motion.div>
+              </div>
             )}
-          </AnimatePresence>
 
           {/* FIX #5: CSS Grid instead of flex-wrap for proper alignment with any number of cards */}
           <div className="flex flex-wrap justify-center gap-3 lg:gap-4 pt-2 lg:pt-3">
@@ -321,15 +313,13 @@ export default function PlanosPublicClient({ planos }: PlanosPublicClientProps) 
               }
 
               return (
-                <motion.div
+                <div
                   key={plano.id}
-                  initial={{ opacity: 0, y: 30 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4, delay: 0.08 * index }}
                   onMouseEnter={() => setHoveredPlanoId(plano.id)}
                   onMouseLeave={() => setHoveredPlanoId(null)}
                   onClick={() => handleSelectPlano(plano)}
-                  className={`${cardClassName} w-full sm:w-[calc(50%-8px)] lg:w-[calc(25%-12px)]`}
+                  className={`${cardClassName} w-full sm:w-[calc(50%-8px)] lg:w-[calc(25%-12px)] animate-[fadeSlideUp_0.4s_ease-out]`}
+                  style={{ animationDelay: `${0.08 * index}s`, animationFillMode: 'both' }}
                 >
                   {/* Popular badge — only a label, no card highlight */}
                   {isPopular && (
@@ -410,17 +400,15 @@ export default function PlanosPublicClient({ planos }: PlanosPublicClientProps) 
                       )}
                     </div>
                   </div>
-                </motion.div>
+                </div>
               );
             })}
           </div>
 
           {/* Trust indicators */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.6 }}
-            className="mt-4 lg:mt-5 hidden sm:grid sm:grid-cols-3 gap-3"
+          <div
+            className="mt-4 lg:mt-5 hidden sm:grid sm:grid-cols-3 gap-3 animate-[fadeIn_0.5s_ease-out]"
+            style={{ animationDelay: '0.6s', animationFillMode: 'both' }}
           >
             <div className="flex items-center gap-2 justify-center text-center px-2">
               <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
@@ -449,7 +437,7 @@ export default function PlanosPublicClient({ planos }: PlanosPublicClientProps) 
                 <p className="text-[10px] text-gray-500">Liberacao automatica apos pagamento</p>
               </div>
             </div>
-          </motion.div>
+          </div>
         </div>
       </main>
 

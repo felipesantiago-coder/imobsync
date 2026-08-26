@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
 import {
   Check, ArrowLeft, Loader2, CreditCard, Shield, Zap,
   Crown, CalendarDays, Clock, Star, AlertCircle, CheckCircle2, TrendingDown,
@@ -164,11 +163,8 @@ export default function PlanosClient({
       <main className="flex-1 w-full px-3 sm:px-4 md:px-6 lg:px-8 xl:px-10 py-8 sm:py-12">
         <div className="max-w-7xl mx-auto">
           {/* Hero */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="text-center mb-10 sm:mb-14"
+          <div
+            className="text-center mb-10 sm:mb-14 animate-[fadeSlideUp_0.5s_ease-out]"
           >
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-100 text-amber-800 text-xs font-semibold mb-4">
               <Zap className="w-3.5 h-3.5" />
@@ -181,36 +177,32 @@ export default function PlanosClient({
               Assine e tenha acesso completo ao espelho de vendas de todos os empreendimentos.
               Cancele quando quiser, sem multa.
             </p>
-          </motion.div>
+          </div>
 
           {/* Assinatura ativa banner */}
           {assinaturaAtiva && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mb-8 p-4 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center gap-3"
+            <div
+              className="mb-8 p-4 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center gap-3 animate-[fadeSlideUp_0.3s_ease-out]"
             >
               <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
               <p className="text-sm text-emerald-800">
                 Você possui uma assinatura <strong>{assinaturaAtiva.plano.nome}</strong> ativa.
                 {' '}<a href="/assinatura" className="underline font-semibold">Gerenciar assinatura</a>
               </p>
-            </motion.div>
+            </div>
           )}
 
           {/* Error */}
           {error && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mb-8 p-4 rounded-xl bg-red-50 border border-red-200 flex items-center gap-3"
+            <div
+              className="mb-8 p-4 rounded-xl bg-red-50 border border-red-200 flex items-center gap-3 animate-[fadeSlideUp_0.3s_ease-out]"
             >
               <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
               <p className="text-sm text-red-700">{error}</p>
               <button onClick={() => setError(null)} className="ml-auto text-red-400 hover:text-red-600">
                 ✕
               </button>
-            </motion.div>
+            </div>
           )}
 
           {/* FIX #5: CSS Grid for proper alignment */}
@@ -244,15 +236,13 @@ export default function PlanosClient({
               }
 
               return (
-                <motion.div
+                <div
                   key={plano.id}
-                  initial={{ opacity: 0, y: 30 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4, delay: 0.08 * index }}
                   onMouseEnter={() => setHoveredPlanoId(plano.id)}
                   onMouseLeave={() => setHoveredPlanoId(null)}
                   onClick={() => handleSelectPlano(plano)}
-                  className={cardClassName}
+                  className={`${cardClassName} animate-[fadeSlideUp_0.4s_ease-out]`}
+                  style={{ animationDelay: `${0.08 * index}s`, animationFillMode: 'both' }}
                 >
                   {/* Popular badge — only visual label, no card highlight */}
                   {isPopular && (
@@ -355,17 +345,15 @@ export default function PlanosClient({
                       )}
                     </div>
                   </div>
-                </motion.div>
+                </div>
               );
             })}
           </div>
 
           {/* Trust indicators */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.6 }}
-            className="mt-12 grid grid-cols-1 sm:grid-cols-3 gap-6"
+          <div
+            className="mt-12 grid grid-cols-1 sm:grid-cols-3 gap-6 animate-[fadeIn_0.5s_ease-out_0.6s]"
+            style={{ animationFillMode: 'both' }}
           >
             <div className="flex flex-col items-center text-center p-4">
               <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center mb-3">
@@ -388,7 +376,7 @@ export default function PlanosClient({
               <p className="text-sm font-semibold text-gray-800">Acesso imediato</p>
               <p className="text-xs text-gray-500 mt-1">Liberação automática após pagamento</p>
             </div>
-          </motion.div>
+          </div>
         </div>
       </main>
 

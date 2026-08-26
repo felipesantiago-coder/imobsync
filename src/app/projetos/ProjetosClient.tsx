@@ -2,7 +2,6 @@
 
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import { Building2, ArrowRight, LogOut, MapPin, Shield, ShieldAlert, X, ChevronDown, Fingerprint, QrCode, Crown, Clock } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -231,11 +230,8 @@ export default function ProjetosClient({ userRole, initialEmpreendimentos, initi
 
       {/* MFA Security Banner */}
       {showMfaBanner && mfaChecked && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-          className="border-b border-amber-200 bg-gradient-to-r from-amber-50 via-amber-50/80 to-orange-50/60"
+        <div
+          className="border-b border-amber-200 bg-gradient-to-r from-amber-50 via-amber-50/80 to-orange-50/60 animate-[fadeSlideUp_0.4s_ease-out]"
         >
           <div className="w-full px-3 sm:px-4 md:px-6 lg:px-8 xl:px-10 py-3">
             <div className="max-w-4xl mx-auto">
@@ -321,7 +317,7 @@ export default function ProjetosClient({ userRole, initialEmpreendimentos, initi
               </div>
             </div>
           </div>
-        </motion.div>
+        </div>
       )}
 
       {/* Main content */}
@@ -329,31 +325,22 @@ export default function ProjetosClient({ userRole, initialEmpreendimentos, initi
         <div className="max-w-4xl mx-auto">
           {/* Title section */}
           <div className="text-center mb-8 sm:mb-12">
-            <motion.h2
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-              className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight"
+            <h2
+              className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight animate-[fadeSlideUp_0.5s_ease-out]"
             >
               Nossos Empreendimentos
-            </motion.h2>
-            <motion.p
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.1 }}
-              className="text-sm sm:text-base text-gray-500 mt-2"
+            </h2>
+            <p
+              className="text-sm sm:text-base text-gray-500 mt-2 animate-[fadeSlideUp_0.5s_ease-out_0.1s]"
             >
               Selecione um empreendimento para acessar o espelho de vendas
-            </motion.p>
+            </p>
           </div>
 
           {/* Region filter */}
           {allRegions.length > 1 && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.15 }}
-              className="mb-8"
+            <div
+              className="mb-8 animate-[fadeSlideUp_0.4s_ease-out_0.15s]"
             >
               <div className="flex items-center gap-2 flex-wrap justify-center">
                 <MapPin className="w-4 h-4 text-gray-400 flex-shrink-0" />
@@ -382,7 +369,7 @@ export default function ProjetosClient({ userRole, initialEmpreendimentos, initi
                   </button>
                 ))}
               </div>
-            </motion.div>
+            </div>
           )}
 
           {/* Results count */}
@@ -401,20 +388,16 @@ export default function ProjetosClient({ userRole, initialEmpreendimentos, initi
                 <SkeletonCard />
               </>
             ) : (
-              <AnimatePresence mode="popLayout">
                 {filteredProjects.map((project, index) => {
                   const href = getProjectHref(project);
                   const description = project.descricao
                     || (project.unit_count > 0 ? `${project.unit_count} unidades` : "Empreendimento");
 
                   return (
-                    <motion.div
+                    <div
                       key={project.id}
-                      layout
-                      initial={{ opacity: 0, y: 30 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.95, y: -10 }}
-                      transition={{ duration: 0.35, delay: 0.05 * index }}
+                      className="animate-[fadeSlideUp_0.35s_ease-out]"
+                      style={{ animationDelay: `${0.05 * index}s`, animationFillMode: 'both' }}
                     >
                       <a
                         href={href}
@@ -471,19 +454,16 @@ export default function ProjetosClient({ userRole, initialEmpreendimentos, initi
                           </div>
                         </div>
                       </a>
-                    </motion.div>
+                    </div>
                   );
                 })}
-              </AnimatePresence>
             )}
           </div>
 
           {/* Empty state */}
           {!isLoading && filteredProjects.length === 0 && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="text-center py-16"
+            <div
+              className="text-center py-16 animate-[fadeIn_0.4s_ease-out]"
             >
               <MapPin className="w-12 h-12 text-gray-300 mx-auto mb-4" />
               <h3 className="text-lg font-semibold text-gray-400">Nenhum empreendimento nessa região</h3>
@@ -496,7 +476,7 @@ export default function ProjetosClient({ userRole, initialEmpreendimentos, initi
                   ver todos
                 </button>
               </p>
-            </motion.div>
+            </div>
           )}
         </div>
       </main>

@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { motion } from 'framer-motion';
 import {
   Clock, CheckCircle2, Loader2, CreditCard,
   RefreshCw, Building2, LogOut, Shield,
@@ -73,7 +72,7 @@ export default function AguardandoPagamentoClient({
 
   // Iniciar polling automático a cada 5 segundos
   useEffect(() => {
-    intervalRef.current = setInterval(checkSubscription, 5000);
+    intervalRef.current = setInterval(checkSubscription, 15000);
 
     // Parar polling após 30 minutos
     timeoutRef.current = setTimeout(() => {
@@ -113,10 +112,8 @@ export default function AguardandoPagamentoClient({
   if (activated) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-green-50 to-emerald-50 flex flex-col items-center justify-center p-4">
-        <motion.div
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          className="text-center max-w-md"
+        <div
+          className="text-center max-w-md animate-[fadeInScale_0.4s_ease-out]"
         >
           <div className="w-20 h-20 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-6">
             <CheckCircle2 className="w-10 h-10 text-emerald-600" />
@@ -128,7 +125,7 @@ export default function AguardandoPagamentoClient({
           <div className="mt-6">
             <Loader2 className="w-5 h-5 animate-spin text-emerald-500 mx-auto" />
           </div>
-        </motion.div>
+        </div>
       </div>
     );
   }
@@ -173,19 +170,14 @@ export default function AguardandoPagamentoClient({
       {/* Main */}
       <main className="flex-1 w-full px-3 sm:px-4 md:px-6 lg:px-8 xl:px-10 py-8 sm:py-12">
         <div className="max-w-lg mx-auto text-center">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
+          <div
+            className="animate-[fadeSlideUp_0.5s_ease-out]"
           >
             {/* Animated icon */}
             <div className="w-20 h-20 rounded-2xl bg-amber-100 flex items-center justify-center mx-auto mb-6">
-              <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
-              >
+              <div className="animate-[spin_2s_linear_infinite]">
                 <CreditCard className="w-10 h-10 text-amber-600" />
-              </motion.div>
+              </div>
             </div>
 
             <h2 className="text-2xl font-bold text-gray-900">Aguardando confirmacao do pagamento</h2>
@@ -246,7 +238,7 @@ export default function AguardandoPagamentoClient({
 
             {/* Auto-refresh info */}
             <p className="text-xs text-gray-400 mt-3">
-              A verificacao e automatica a cada 5 segundos. O pagamento via Pix e confirmado em poucos minutos.
+              A verificacao e automatica a cada 15 segundos. O pagamento via Pix e confirmado em poucos minutos.
             </p>
 
             {/* Manual check button */}
@@ -284,7 +276,7 @@ export default function AguardandoPagamentoClient({
                 </p>
               </div>
             </div>
-          </motion.div>
+          </div>
         </div>
       </main>
 

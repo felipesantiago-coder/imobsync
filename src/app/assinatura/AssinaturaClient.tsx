@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
 import {
   ArrowLeft, Crown, CheckCircle2, XCircle, Clock, CreditCard,
   Loader2, AlertCircle, ExternalLink, RefreshCw, Shield,
@@ -241,10 +240,8 @@ export default function AssinaturaClient({ userName, isAdmin, returnedFromPaymen
             </div>
           ) : !assinatura ? (
             /* Sem assinatura */
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="text-center py-16"
+            <div
+              className="text-center py-16 animate-[fadeSlideUp_0.5s_ease-out]"
             >
               <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-4">
                 <Crown className="w-8 h-8 text-gray-400" />
@@ -260,19 +257,15 @@ export default function AssinaturaClient({ userName, isAdmin, returnedFromPaymen
                 <ExternalLink className="w-4 h-4" />
                 Ver planos disponíveis
               </a>
-            </motion.div>
+            </div>
           ) : (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="space-y-6"
+            <div
+              className="space-y-6 animate-[fadeSlideUp_0.5s_ease-out]"
             >
               {/* Banner de confirmação de pagamento */}
               {paymentJustConfirmed && (
-                <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="p-6 sm:p-8 rounded-2xl bg-emerald-50 border-2 border-emerald-200 shadow-sm"
+                <div
+                  className="p-6 sm:p-8 rounded-2xl bg-emerald-50 border-2 border-emerald-200 shadow-sm animate-[fadeSlideUp_0.3s_ease-out]"
                 >
                   <div className="flex flex-col items-center text-center gap-4">
                     <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center">
@@ -293,7 +286,7 @@ export default function AssinaturaClient({ userName, isAdmin, returnedFromPaymen
                       <ArrowLeft className="w-4 h-4 ml-2 rotate-180" />
                     </Button>
                   </div>
-                </motion.div>
+                </div>
               )}
 
               {/* Error */}
@@ -490,7 +483,7 @@ export default function AssinaturaClient({ userName, isAdmin, returnedFromPaymen
                   )}
                 </div>
               </div>
-            </motion.div>
+            </div>
           )}
         </div>
       </main>
