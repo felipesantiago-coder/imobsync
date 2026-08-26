@@ -1,37 +1,58 @@
-import { readFile, stat } from "fs/promises";
-import { join, resolve } from "path";
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
 
 // S3-P2-004 FIX: Require authentication for download
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
+    // 1. Autenticar o usuário via cookie de sessão
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !serviceRoleKey) {
+      return NextResponse.json({ error: "Storage não configurado" }, { status: 500 });
+    }
+
+    const supabase = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+
+    // Verificar autenticação a partir do cookie
+    const authHeader = request.headers.get('authorization');
+    const cookieHeader = request.headers.get('cookie') || '';
+    const authTokenMatch = cookieHeader.match(/sb-[^=]+-auth-token=([^;]+)/);
+
+    if (!authTokenMatch) {
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
 
-    // S3-P2-004 FIX: Prevent path traversal
-    const safeDir = resolve(join(process.cwd(), "download"));
-    const filePath = resolve(join(safeDir, "projeto.zip"));
-    if (!filePath.startsWith(safeDir)) {
-      return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
+    try {
+      const accessToken = JSON.parse(decodeURIComponent(authTokenMatch[1]))?.access_token;
+      if (!accessToken) throw new Error('no token');
+
+      const { data: { user }, error: authError } = await supabase.auth.getUser(accessToken);
+      if (authError || !user) {
+        return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+      }
+    } catch {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
 
-    const buffer = await readFile(filePath);
-    const fileStat = await stat(filePath);
-    return new NextResponse(buffer, {
-      headers: {
-        "Content-Type": "application/zip",
-        "Content-Disposition": "attachment; filename=projeto.zip",
-        "Content-Length": fileStat.size.toString(),
-        "Cache-Control": "private, no-cache",
-      },
-    });
-  } catch {
-    return NextResponse.json({ error: "Arquivo não encontrado" }, { status: 404 });
+    // 2. Gerar URL assinada para download direto do Supabase Storage
+    const { data: signedUrlData, error: urlError } = await supabase.storage
+      .from('downloads')
+      .createSignedUrl('projeto.zip', 60); // URL válida por 60 segundos
+
+    if (urlError || !signedUrlData) {
+      console.error('[download] Erro ao gerar URL assinada:', urlError);
+      return NextResponse.json({ error: "Arquivo não encontrado" }, { status: 404 });
+    }
+
+    // 3. Redirecionar para o download direto (não passa pelo serverless)
+    return NextResponse.redirect(signedUrlData.signedUrl);
+  } catch (err) {
+    console.error('[download] Erro:', err);
+    return NextResponse.json({ error: "Erro ao processar download" }, { status: 500 });
   }
 }

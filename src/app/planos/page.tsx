@@ -1,4 +1,4 @@
-export const dynamic = 'force-dynamic';
+export const revalidate = 300; // Revalidar a cada 5 minutos (planos mudam raramente)
 
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -11,7 +11,7 @@ export default async function PlanosPage() {
   let profile: Record<string, unknown> | null = null;
   let assinaturaAtiva: Record<string, unknown> | null = null;
 
-  // Tentar detectar usuário logado (pode falhar se env vars não estão configuradas)
+  // Tentar detectar usuário logado
   try {
     const supabase = await createClient();
     const { data } = await supabase.auth.getUser();
