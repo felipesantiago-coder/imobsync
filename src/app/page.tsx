@@ -36,7 +36,7 @@ const slides = [
   },
   {
     type: "mobile" as const,
-    image: "/mock-mobile-02.webp"
+    image: "/mock-mobile-02.webp",
     title: "Gerencie vendas em tempo real",
     desc: "Atualize status de unidades, acompanhe reservas e feche vendas direto pelo celular.",
   },
