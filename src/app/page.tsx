@@ -99,9 +99,10 @@ function LoginForm() {
 
         let profile: Record<string, unknown> | null = null;
 
+        // Query única: traz tudo necessário para decisão de roteamento
         const { data: pFull, error: errFull } = await supabase
           .from("profiles")
-          .select("role, mfa_enabled, must_change_password, must_setup_mfa")
+          .select("role, mfa_enabled, must_change_password, must_setup_mfa, subscription_status")
           .eq("id", data.user.id)
           .maybeSingle();
 
@@ -110,7 +111,7 @@ function LoginForm() {
         } else {
           const { data: pBase, error: errBase } = await supabase
             .from("profiles")
-            .select("role")
+            .select("role, subscription_status")
             .eq("id", data.user.id)
             .maybeSingle();
           if (!errBase) profile = pBase as Record<string, unknown> | null;
@@ -131,66 +132,56 @@ function LoginForm() {
           }
 
           let hasMfa = profile?.mfa_enabled ?? false;
-          if (!hasMfa) {
-            const [totpRes, passkeyRes] = await Promise.all([
-              supabase
-                .from("user_totp")
-                .select("id")
-                .eq("user_id", data.user.id)
-                .eq("verified", true)
-                .maybeSingle(),
-              supabase
-                .from("user_passkeys")
-                .select("*", { count: "exact", head: true })
-                .eq("user_id", data.user.id),
-            ]);
-            if (totpRes.data) hasMfa = true;
-            if (!hasMfa && passkeyRes.count && passkeyRes.count > 0) hasMfa = true;
-          }
-
           const isAdmin =
             (!profile && isAdminEmail) || profile?.role === "admin_sistema";
+
+          // Executar verificação MFA e subscription em paralelo
+          const mfaCheck = !hasMfa
+            ? Promise.all([
+                supabase
+                  .from("user_totp")
+                  .select("id")
+                  .eq("user_id", data.user.id)
+                  .eq("verified", true)
+                  .maybeSingle(),
+                supabase
+                  .from("user_passkeys")
+                  .select("*", { count: "exact", head: true })
+                  .eq("user_id", data.user.id),
+              ]).then(([totpRes, passkeyRes]) => {
+                if (totpRes.data) return true;
+                if (passkeyRes.count && passkeyRes.count > 0) return true;
+                return false;
+              })
+            : Promise.resolve(false);
+
+          const subCheck = isAdmin
+            ? Promise.resolve()
+            : fetch('/api/subscription-refresh', { signal: AbortSignal.timeout(8000) })
+                .then(async (res) => {
+                  if (res.ok) {
+                    const d = await res.json();
+                    if (d.status) document.cookie = `subscription_status=${d.status}; path=/; max-age=300; SameSite=Lax`;
+                    return;
+                  }
+                  // Fallback: usar valor do profile já consultado
+                  const subStatus = (profile?.subscription_status as string) || "none";
+                  if (subStatus !== "none") document.cookie = `subscription_status=${subStatus}; path=/; max-age=300; SameSite=Lax`;
+                })
+                .catch(() => {
+                  // Fallback sem rede: usar valor do profile já consultado
+                  const subStatus = (profile?.subscription_status as string) || "none";
+                  if (subStatus !== "none") document.cookie = `subscription_status=${subStatus}; path=/; max-age=300; SameSite=Lax`;
+                });
+
           if (isAdmin) {
             document.cookie =
               "subscription_status=active; path=/; max-age=300; SameSite=Lax";
-          } else {
-            try {
-              const controller = new AbortController();
-              const timeoutId = setTimeout(() => controller.abort(), 8000);
-              const refreshRes = await fetch('/api/subscription-refresh', { signal: controller.signal });
-              clearTimeout(timeoutId);
-              if (refreshRes.ok) {
-                const refreshData = await refreshRes.json();
-                if (refreshData.status) {
-                  document.cookie = `subscription_status=${refreshData.status}; path=/; max-age=300; SameSite=Lax`;
-                }
-              } else {
-                const { data: subProfile } = await supabase
-                  .from("profiles")
-                  .select("subscription_status")
-                  .eq("id", data.user.id)
-                  .maybeSingle();
-                const subStatus =
-                  (subProfile as Record<string, unknown> | null)?.subscription_status ||
-                  "none";
-                if (subStatus !== "none") {
-                  document.cookie = `subscription_status=${subStatus}; path=/; max-age=300; SameSite=Lax`;
-                }
-              }
-            } catch {
-              const { data: subProfile } = await supabase
-                .from("profiles")
-                .select("subscription_status")
-                .eq("id", data.user.id)
-                .maybeSingle();
-              const subStatus =
-                (subProfile as Record<string, unknown> | null)?.subscription_status ||
-                "none";
-              if (subStatus !== "none") {
-                document.cookie = `subscription_status=${subStatus}; path=/; max-age=300; SameSite=Lax`;
-              }
-            }
           }
+
+          // Aguardar ambas verificações em paralelo
+          const [mfaResult] = await Promise.all([mfaCheck, subCheck]);
+          hasMfa = hasMfa || mfaResult;
 
           const finalRedirect = isAdmin
             ? "/admin-sistema"
@@ -206,7 +197,8 @@ function LoginForm() {
           }
 
           if (hasMfa) {
-            await fetch('/api/mfa/require', { method: 'POST' }).catch(() => {});
+            // Definir cookie diretamente — MFA já verificado client-side
+            document.cookie = `mfa_pending=true; path=/; max-age=600; SameSite=Lax`;
             router.push(`/mfa-verify?redirect=${encodeURIComponent(finalRedirect)}`);
           } else {
             router.push(finalRedirect);

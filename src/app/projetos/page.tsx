@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { getCoordenadorEmpreendimentos } from "@/lib/coordinator-access";
 import ProjetosClient from "./ProjetosClient";
@@ -34,11 +35,17 @@ export default async function ProjetosPage() {
   const isAdminEmail = user.email?.toLowerCase() === "prosperosdirecional@gmail.com";
   let userRole = isAdminEmail ? "admin_sistema" : "coordenador";
 
-  // Buscar tudo em paralelo: profile + empreendimentos + MFA + assinatura
-  const [profileResult, empsResult, totpResult, passkeyResult, assinaturaResult] = await Promise.all([
+  // Ler subscription_status do cookie (definido no login)
+  const cookieStore = await cookies();
+  const subCookie = cookieStore.get("subscription_status")?.value;
+  const hasActivePlan = subCookie === "active" || subCookie === "lifetime";
+
+  // Buscar apenas profile + empreendimentos em paralelo
+  // (MFA e assinatura já verificados no login — não precisam de query aqui)
+  const [profileResult, empsResult] = await Promise.all([
     supabase
       .from("profiles")
-      .select("role, mfa_enabled, subscription_status")
+      .select("role, mfa_enabled")
       .eq("id", user.id)
       .maybeSingle(),
     supabase
@@ -46,32 +53,14 @@ export default async function ProjetosPage() {
       .select("id, nome, slug, regiao, imagem_url, descricao, ativo, created_at")
       .eq("ativo", true)
       .order("created_at", { ascending: true }),
-    supabase
-      .from("user_totp")
-      .select("id, verified")
-      .eq("user_id", user.id)
-      .eq("verified", true)
-      .maybeSingle(),
-    supabase
-      .from("user_passkeys")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id),
-    supabase
-      .from("assinaturas")
-      .select("id, status, data_fim, plano:planos(id, nome, periodo_meses, preco)")
-      .eq("user_id", user.id)
-      .in("status", ["active", "lifetime"])
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
   ]);
 
   if (!profileResult.error && profileResult.data?.role) {
     userRole = profileResult.data.role;
   }
 
-  const profileMfa = profileResult.data?.mfa_enabled ?? false;
-  const hasVerifiedMfa = profileMfa || !!totpResult.data || (passkeyResult.count && passkeyResult.count > 0);
+  // MFA já verificado no login — usar apenas o flag do profile
+  const hasVerifiedMfa = profileResult.data?.mfa_enabled ?? false;
 
   // Processar empreendimentos com contagem de unidades + última atualização
   let empreendimentos: EmpreendimentoData[] = [];
@@ -90,32 +79,16 @@ export default async function ProjetosPage() {
       .filter(e => !LEGACY_TABLE_MAP[e.slug])
       .map(e => e.id);
 
+    // Iniciar coord check em paralelo com as queries de unidades
+    const coordPromise = userRole === "coordenador"
+      ? getCoordenadorEmpreendimentos(user.id)
+      : Promise.resolve(null);
+
     // Buscar contagem de unidades + updated_at em LOTE (uma query)
-    const { data: genericUnitRows } = await supabase
+    const unitsPromise = supabase
       .from("projeto_units")
       .select("empreendimento_id, updated_at")
       .in("empreendimento_id", empIds);
-
-    // Calcular contagem e MAX(updated_at) para projetos genéricos
-    const countMap = new Map<string, number>();
-    const genericMaxMap = new Map<string, string>();
-
-    if (genericUnitRows) {
-      for (const r of genericUnitRows) {
-        const id = r.empreendimento_id as string;
-        countMap.set(id, (countMap.get(id) || 0) + 1);
-        const ts = r.updated_at as string;
-        if (ts) {
-          const current = genericMaxMap.get(id);
-          if (!current || ts > current) genericMaxMap.set(id, ts);
-        }
-      }
-    }
-
-    // Para projetos genéricos, usar os dados calculados acima
-    for (const id of genericIds) {
-      lastUpdatedMap[id] = genericMaxMap.get(id) || null;
-    }
 
     // Buscar updated_at das tabelas legadas em paralelo
     const legacyQueries = legacySlugs.map(async (slug) => {
@@ -126,7 +99,32 @@ export default async function ProjetosPage() {
       return { slug, rows: data as { updated_at: string }[] | null };
     });
 
-    const legacyResults = await Promise.all(legacyQueries);
+    // Aguardar tudo em paralelo: unidades + legados + coord check
+    const [unitsResult, legacyResults, allowedIds] = await Promise.all([
+      unitsPromise,
+      Promise.all(legacyQueries),
+      coordPromise,
+    ]);
+
+    // Calcular contagem e MAX(updated_at) para projetos genéricos
+    const countMap = new Map<string, number>();
+    const genericMaxMap = new Map<string, string>();
+
+    if (unitsResult.data) {
+      for (const r of unitsResult.data) {
+        const id = r.empreendimento_id as string;
+        countMap.set(id, (countMap.get(id) || 0) + 1);
+        const ts = r.updated_at as string;
+        if (ts) {
+          const current = genericMaxMap.get(id);
+          if (!current || ts > current) genericMaxMap.set(id, ts);
+        }
+      }
+    }
+
+    for (const id of genericIds) {
+      lastUpdatedMap[id] = genericMaxMap.get(id) || null;
+    }
 
     for (const { slug, rows } of legacyResults) {
       const empId = slugToId.get(slug);
@@ -140,43 +138,22 @@ export default async function ProjetosPage() {
       } else {
         lastUpdatedMap[empId] = null;
       }
-      // Contagem de unidades legadas já vem do projeto_units (migradas)
-      // ou será 0 se não foram migradas
     }
 
-    empreendimentos = emps.map(emp => ({
+    // Construir lista com contagem
+    const empsWithCount = emps.map(emp => ({
       ...emp,
       unit_count: countMap.get(emp.id) || 0,
     }));
 
     // Coordenador: filtrar apenas empreendimentos atribuídos
-    if (userRole === "coordenador") {
-      const allowedIds = await getCoordenadorEmpreendimentos(user.id);
-      if (allowedIds !== null) {
-        // null = tabela não existe = sem restrição (migration não executada)
-        const allowedSet = new Set(allowedIds);
-        empreendimentos = empreendimentos.filter(emp => allowedSet.has(emp.id));
-      }
+    if (allowedIds !== null) {
+      const allowedSet = new Set(allowedIds);
+      empreendimentos = empsWithCount.filter(emp => allowedSet.has(emp.id));
+    } else {
+      empreendimentos = empsWithCount;
     }
   }
-
-  // Determinar se usuário tem plano ativo ou vitalício
-  type PlanoInfo = { id: string; nome: string; periodo_meses: number; preco: number } | null;
-  type AssinaturaSummary = {
-    status: string;
-    data_fim: string | null;
-    plano: PlanoInfo;
-  } | null;
-
-  const assinaturaAtiva: AssinaturaSummary = assinaturaResult.data
-    ? {
-        status: assinaturaResult.data.status as string,
-        data_fim: assinaturaResult.data.data_fim as string | null,
-        plano: (Array.isArray(assinaturaResult.data.plano) ? assinaturaResult.data.plano[0] : assinaturaResult.data.plano) as PlanoInfo,
-      }
-    : null;
-
-  const hasActivePlan = assinaturaAtiva !== null;
 
   return (
     <ProjetosClient

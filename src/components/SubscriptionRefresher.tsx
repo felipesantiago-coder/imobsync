@@ -18,8 +18,16 @@ import { usePathname } from 'next/navigation';
 export default function SubscriptionRefresher() {
   const pathname = usePathname();
   const lastRefreshRef = useRef<number>(0);
+  const isInitialMount = useRef(true);
 
   useEffect(() => {
+    // Pular a primeira montagem — o cookie acaba de ser definido no login
+    // e chamar subscription-refresh aqui seria redundante
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+
     // Rotas onde não precisa de refresh
     const publicPaths = ['/', '/planos', '/aguardando-pagamento', '/change-password', '/mfa-onboarding', '/mfa-verify', '/mfa-setup'];
     if (publicPaths.includes(pathname)) {
