@@ -14,6 +14,7 @@ import {
   Monitor,
   Smartphone,
 } from "lucide-react";
+import { useTurnstile } from "@/components/TurnstileWidget";
 
 const slides = [
   {
@@ -56,6 +57,7 @@ function LoginForm() {
     if (reason === "login_error") return "Erro inesperado. Tente novamente.";
     return "";
   });
+  const { token: turnstileToken, reset: resetTurnstile, widgetRef } = useTurnstile();
 
   const [activeFeature, setActiveFeature] = useState(0);
 
@@ -72,6 +74,21 @@ function LoginForm() {
     setError("");
 
     try {
+      // Verificação Turnstile (anti-bot) — falha silenciosamente em dev/local
+      if (turnstileToken && turnstileToken !== "bypass") {
+        const turnstileRes = await fetch('/api/turnstile-verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: turnstileToken }),
+        });
+        if (!turnstileRes.ok) {
+          setError("Verificação de segurança falhou. Tente novamente.");
+          setLoading(false);
+          resetTurnstile();
+          return;
+        }
+      }
+
       const { data, error } = await createClient().auth.signInWithPassword({
         email,
         password,
@@ -83,12 +100,14 @@ function LoginForm() {
           : error.message
         );
         setLoading(false);
+        resetTurnstile();
         return;
       }
 
       if (!data.user) {
         setError("Sessão não encontrada. Tente novamente.");
         setLoading(false);
+        resetTurnstile();
         return;
       }
 
@@ -208,12 +227,14 @@ function LoginForm() {
           console.error('[Login] Erro no pós-login:', err);
           setError("Erro ao processar login. Tente novamente.");
           setLoading(false);
+          resetTurnstile();
           return;
         }
     } catch (err) {
       console.error('[Login] Erro de conexão:', err);
       setError("Erro ao conectar com o servidor");
       setLoading(false);
+      resetTurnstile();
     }
   };
 
@@ -293,6 +314,9 @@ function LoginForm() {
                   </button>
                 </div>
               </div>
+
+              {/* Cloudflare Turnstile — widget invisível (anti-bot) */}
+              <div ref={widgetRef} />
 
               <button
                 type="submit"
