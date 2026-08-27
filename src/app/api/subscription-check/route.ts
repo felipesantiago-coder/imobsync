@@ -51,7 +51,7 @@ export async function GET() {
         });
       }
 
-      return NextResponse.json({
+      const response = NextResponse.json({
         authenticated: true,
         subscriptionActive: true,
         subscription: {
@@ -64,6 +64,16 @@ export async function GET() {
           subscriptionStatus: profile?.subscription_status || 'none',
         },
       });
+
+      response.cookies.set('subscription_status', 'active', {
+        path: '/',
+        maxAge: 300,
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+      });
+
+      return response;
     }
 
     // Verificar se há assinatura pendente

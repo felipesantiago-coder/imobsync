@@ -61,14 +61,20 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       message: "Senha atualizada com sucesso",
-    }, {
-      headers: {
-        "Set-Cookie": "first_login_step=setup_mfa; path=/; max-age=3600; SameSite=Lax",
-      },
     });
+
+    response.cookies.set('first_login_step', 'setup_mfa', {
+      path: '/',
+      maxAge: 3600,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+    });
+
+    return response;
   } catch (err) {
     console.error("Erro no change-password:", err);
     const msg = err instanceof Error ? err.message : "Erro interno";

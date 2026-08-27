@@ -58,6 +58,8 @@ export async function GET(request: globalThis.Request) {
       response.cookies.set('subscription_status', '', {
         path: '/',
         maxAge: 0,
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
       });
       return response;
@@ -82,6 +84,8 @@ export async function GET(request: globalThis.Request) {
       response.cookies.set('subscription_status', 'active', {
         path: '/',
         maxAge: 300,
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
       });
       return response;
@@ -127,6 +131,8 @@ export async function GET(request: globalThis.Request) {
     response.cookies.set('subscription_status', realStatus, {
       path: '/',
       maxAge: 300,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
     });
 

@@ -118,14 +118,23 @@ function LoginForm() {
         }
 
           if (profile?.must_change_password) {
-            document.cookie = "first_login_step=change_password; path=/; max-age=3600; SameSite=Lax";
+            // Cookie HttpOnly via API — não usa document.cookie
+            fetch('/api/auth/set-routing-cookie', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ step: 'change_password' }),
+            }).catch(() => {});
             router.push("/change-password");
             router.refresh();
             return;
           }
 
           if (profile?.must_setup_mfa) {
-            document.cookie = "first_login_step=setup_mfa; path=/; max-age=3600; SameSite=Lax";
+            fetch('/api/auth/set-routing-cookie', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ step: 'setup_mfa' }),
+            }).catch(() => {});
             router.push("/mfa-onboarding");
             router.refresh();
             return;
@@ -155,32 +164,24 @@ function LoginForm() {
               })
             : Promise.resolve(false);
 
+          // subscription-refresh seta cookie HttpOnly via response header
           const subCheck = isAdmin
-            ? Promise.resolve()
+            ? Promise.resolve('active' as string)
             : fetch('/api/subscription-refresh', { signal: AbortSignal.timeout(8000) })
                 .then(async (res) => {
                   if (res.ok) {
                     const d = await res.json();
-                    if (d.status) document.cookie = `subscription_status=${d.status}; path=/; max-age=300; SameSite=Lax`;
-                    return;
+                    return (d.status as string) || null;
                   }
                   // Fallback: usar valor do profile já consultado
-                  const subStatus = (profile?.subscription_status as string) || "none";
-                  if (subStatus !== "none") document.cookie = `subscription_status=${subStatus}; path=/; max-age=300; SameSite=Lax`;
+                  return (profile?.subscription_status as string) || 'none';
                 })
                 .catch(() => {
-                  // Fallback sem rede: usar valor do profile já consultado
-                  const subStatus = (profile?.subscription_status as string) || "none";
-                  if (subStatus !== "none") document.cookie = `subscription_status=${subStatus}; path=/; max-age=300; SameSite=Lax`;
+                  return (profile?.subscription_status as string) || 'none';
                 });
 
-          if (isAdmin) {
-            document.cookie =
-              "subscription_status=active; path=/; max-age=300; SameSite=Lax";
-          }
-
           // Aguardar ambas verificações em paralelo
-          const [mfaResult] = await Promise.all([mfaCheck, subCheck]);
+          const [mfaResult, subStatus] = await Promise.all([mfaCheck, subCheck]);
           hasMfa = hasMfa || mfaResult;
 
           const finalRedirect = isAdmin
@@ -189,7 +190,7 @@ function LoginForm() {
 
           if (
             !isAdmin &&
-            document.cookie.includes("subscription_status=pending")
+            subStatus === 'pending'
           ) {
             router.push("/aguardando-pagamento");
             router.refresh();
@@ -197,8 +198,8 @@ function LoginForm() {
           }
 
           if (hasMfa) {
-            // Definir cookie diretamente — MFA já verificado client-side
-            document.cookie = `mfa_pending=true; path=/; max-age=600; SameSite=Lax`;
+            // Cookie HttpOnly setado via API
+            fetch('/api/mfa/require', { method: 'POST' }).catch(() => {});
             router.push(`/mfa-verify?redirect=${encodeURIComponent(finalRedirect)}`);
           } else {
             router.push(finalRedirect);
