@@ -58,7 +58,8 @@ test
 prompt
 
 server.log
-# Skills directory
+# Skills directory (AI assistant - not part of ImobSync)
+/skills/
 /skills/upload/
 tool-results/
 
