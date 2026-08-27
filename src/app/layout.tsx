@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { Suspense } from "react";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import SubscriptionRefresher from "@/components/SubscriptionRefresher";
@@ -78,7 +79,9 @@ export default function RootLayout({
       >
         {children}
         <Toaster />
-        <SubscriptionRefresher />
+        <Suspense fallback={null}>
+          <SubscriptionRefresher />
+        </Suspense>
       </body>
     </html>
   );

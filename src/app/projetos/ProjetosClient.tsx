@@ -80,11 +80,14 @@ export default function ProjetosClient({ userRole, initialEmpreendimentos, initi
   const router = useRouter();
   const [filterRegion, setFilterRegion] = useState<Region | "all">("all");
   const [projects, setProjects] = useState<EmpreendimentoDB[]>(initialEmpreendimentos);
+  const [mounted, setMounted] = useState(false);
 
   // MFA banner state
   const [showMfaBanner, setShowMfaBanner] = useState(false);
   const [mfaBannerExpanded, setMfaBannerExpanded] = useState(false);
   const [mfaChecked, setMfaChecked] = useState(false);
+
+  useEffect(() => { setMounted(true); }, []);
 
   // Dados já vieram do servidor — não precisa de fetch
   // Mas se os dados vieram vazios (tabela não populada), faz fetch como fallback
@@ -442,7 +445,10 @@ export default function ProjetosClient({ userRole, initialEmpreendimentos, initi
                           {canSeeLastUpdated && lastUpdatedMap[project.id] && (
                             <p className="flex items-center gap-1.5 text-xs text-gray-400 mt-2">
                               <Clock className="w-3 h-3" />
-                              Última atualização: {formatLastUpdated(lastUpdatedMap[project.id])}
+                              {mounted
+                                ? <>Última atualização: {formatLastUpdated(lastUpdatedMap[project.id])}</>
+                                : <>Última atualização: ...</>
+                              }
                             </p>
                           )}
                           <div className="mt-4 flex items-center justify-between">
