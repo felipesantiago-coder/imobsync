@@ -808,7 +808,7 @@ const FloorSection = memo(function FloorSection({
             transition={{ duration: 0.3, ease: "easeInOut" }}
             className="overflow-visible"
           >
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-5">
               {floorUnits.map((unit) => (
                 <UnitCard
                   key={unit.id}
@@ -882,7 +882,7 @@ function LoadingSkeleton() {
         </div>
       </div>
       {/* Card skeletons */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-5">
         {Array.from({ length: 8 }).map((_, i) => (
           <div
             key={i}
@@ -1640,7 +1640,7 @@ export default function DynamicDashboard({
               Ordenado por{" "}
               {sortBy === "price-asc" ? "menor preço" : "maior preço"}
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-5">
               {filteredUnits.map((unit) => (
                 <UnitCard
                   key={unit.id}
