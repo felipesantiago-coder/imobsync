@@ -61,7 +61,7 @@ export function useTurnstile() {
         "error-callback": () => setToken(null),
         "expired-callback": () => setToken(null),
         size: "invisible",
-        appearance: "interaction-only",
+        execution: "render",
       });
     };
 
