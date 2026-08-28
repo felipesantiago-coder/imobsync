@@ -50,7 +50,7 @@ export function useTurnstile() {
         try {
           window.turnstile.remove(widgetIdRef.current);
         } catch {
-          // ignore
+          // widget já removido — ignore
         }
         widgetIdRef.current = null;
       }
@@ -66,22 +66,36 @@ export function useTurnstile() {
     };
 
     // Esperar o script carregar
+    let interval: ReturnType<typeof setInterval> | undefined;
     if (typeof window.turnstile !== "undefined") {
       renderWidget();
     } else {
       // Polling curto para esperar o script (max 3s)
       let attempts = 0;
-      const interval = setInterval(() => {
+      interval = setInterval(() => {
         attempts++;
         if (typeof window.turnstile !== "undefined" || attempts > 30) {
-          clearInterval(interval);
+          clearInterval(interval!);
+          interval = undefined;
           if (typeof window.turnstile !== "undefined") {
             renderWidget();
           }
         }
       }, 100);
-      return () => clearInterval(interval);
     }
+
+    // Cleanup ao desmontar — remove o widget e limpa o polling
+    return () => {
+      if (interval) clearInterval(interval);
+      if (widgetIdRef.current !== null && typeof window.turnstile !== "undefined") {
+        try {
+          window.turnstile.remove(widgetIdRef.current);
+        } catch {
+          // DOM já pode ter sido removido
+        }
+        widgetIdRef.current = null;
+      }
+    };
   }, [isConfigured, siteKey]);
 
   const reset = useCallback(() => {
