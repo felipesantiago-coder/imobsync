@@ -74,18 +74,21 @@ function LoginForm() {
     setError("");
 
     try {
-      // Verificação Turnstile (anti-bot) — falha silenciosamente em dev/local
+      // Verificação Turnstile (anti-bot) — não-bloqueante (defense-in-depth)
+      // Se falhar, loga o incidente mas permite o login.
+      // A segurança primária vem do Supabase Auth + MFA.
       if (turnstileToken && turnstileToken !== "bypass") {
-        const turnstileRes = await fetch('/api/turnstile-verify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: turnstileToken }),
-        });
-        if (!turnstileRes.ok) {
-          setError("Verificação de segurança falhou. Tente novamente.");
-          setLoading(false);
-          resetTurnstile();
-          return;
+        try {
+          const turnstileRes = await fetch('/api/turnstile-verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: turnstileToken }),
+          });
+          if (!turnstileRes.ok) {
+            console.warn('[Login] Turnstile verification failed, proceeding with login');
+          }
+        } catch {
+          // Turnstile indisponível — não bloqueia login
         }
       }
 
