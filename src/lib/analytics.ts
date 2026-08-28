@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export type AnalyticsEvent = {
   event_type: string;
@@ -8,8 +8,10 @@ export type AnalyticsEvent = {
 };
 
 /**
- * Registra um evento de analytics no banco (server-side, fire-and-forget).
- * Não bloqueia a resposta da requisição principal.
+ * Registra um evento de analytics no banco (server-side).
+ * Usa admin client (service_role) para bypass RLS.
+ * Chamado de dentro de API routes — o await não adiciona latência perceptível
+ * pois a rota principal já está processando.
  */
 export async function trackEvent(
   userId: string | null | undefined,
@@ -19,8 +21,8 @@ export async function trackEvent(
 ) {
   if (!userId) return;
   try {
-    const supabase = await createClient();
-    await supabase.from("analytics_events").insert({
+    const admin = createAdminClient();
+    await admin.from("analytics_events").insert({
       user_id: userId,
       role,
       event_type: event.event_type,
@@ -29,13 +31,15 @@ export async function trackEvent(
       metadata: event.metadata ?? {},
       ip_address: ipAddress ?? null,
     });
-  } catch {
-    // Fire-and-forget: falha de tracking nunca deve quebrar o fluxo principal
+  } catch (err) {
+    // Falha de tracking nunca deve quebrar o fluxo principal
+    console.warn("[Analytics] trackEvent falhou:", err);
   }
 }
 
 /**
  * Registra mudança de status de unidade no histórico.
+ * Usa admin client (service_role) para bypass RLS.
  */
 export async function trackUnitStatusChange(params: {
   unitId?: string | null;
@@ -48,8 +52,8 @@ export async function trackUnitStatusChange(params: {
   changedByRole: string;
 }) {
   try {
-    const supabase = await createClient();
-    await supabase.from("unit_status_history").insert({
+    const admin = createAdminClient();
+    await admin.from("unit_status_history").insert({
       unit_id: params.unitId ?? null,
       empreendimento_id: params.empreendimentoId,
       unidade: params.unidade,
@@ -59,7 +63,7 @@ export async function trackUnitStatusChange(params: {
       changed_by: params.changedBy,
       changed_by_role: params.changedByRole,
     });
-  } catch {
-    // Fire-and-forget
+  } catch (err) {
+    console.warn("[Analytics] trackUnitStatusChange falhou:", err);
   }
 }

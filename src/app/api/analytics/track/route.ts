@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   try {
+    // Validação de autenticação via anon key (com cookies do usuário)
     const supabase = await createClient();
     const {
       data: { user },
@@ -39,8 +41,15 @@ export async function POST(request: NextRequest) {
       ip_address: ipAddress,
     }));
 
-    // Fire-and-forget: não esperamos o resultado
-    supabase.from("analytics_events").insert(rows);
+    // Insert via admin client (service_role) para bypass RLS.
+    // CRÍTICO: await obrigatório — sem await, o Vercel pode congelar/terminar
+    // a função serverless antes que o insert HTTP para Supabase complete.
+    try {
+      const admin = createAdminClient();
+      await admin.from("analytics_events").insert(rows);
+    } catch (insertErr) {
+      console.warn("[Analytics] Falha ao inserir eventos:", insertErr);
+    }
 
     return NextResponse.json({ ok: true });
   } catch {

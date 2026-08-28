@@ -4,7 +4,7 @@ import { useCallback } from "react";
 
 /**
  * Hook client-side para disparar eventos de analytics (fire-and-forget).
- * Usa fetch com keepalive como fallback para sendBeacon.
+ * Usa sendBeacon com Blob para garantir Content-Type correto.
  */
 export function useTrackEvent() {
   const track = useCallback(
@@ -17,7 +17,10 @@ export function useTrackEvent() {
       try {
         const body = JSON.stringify(event);
         if (navigator.sendBeacon) {
-          navigator.sendBeacon("/api/analytics/track", body);
+          // Blob com type explícito — sendBeacon com string envia text/plain,
+          // o que pode falhar na desserialização do JSON no servidor
+          const blob = new Blob([body], { type: "application/json" });
+          navigator.sendBeacon("/api/analytics/track", blob);
         } else {
           fetch("/api/analytics/track", {
             method: "POST",

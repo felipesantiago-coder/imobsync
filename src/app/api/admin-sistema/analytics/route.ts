@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdminSistema } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
@@ -8,7 +8,8 @@ export async function GET(request: NextRequest) {
   const isAllowed = await requireAdminSistema();
   if (!isAllowed) return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
 
-  const supabase = await createClient();
+  // Admin client (service_role) para bypass RLS — já validamos admin acima
+  const supabase = createAdminClient();
   const { searchParams } = new URL(request.url);
   const days = parseInt(searchParams.get("days") || "30");
   const role = searchParams.get("role") || null;
@@ -143,6 +144,7 @@ export async function GET(request: NextRequest) {
 
   // 8. Histórico de status de unidades
   let statusHistory: Array<Record<string, unknown>> = [];
+  // profiles via join precisa do admin client (que já estamos usando)
   const { data: history } = await supabase
     .from("unit_status_history")
     .select("*, profiles(display_name, email, role)")
