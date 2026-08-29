@@ -52,7 +52,7 @@ print('[charts] OK')
 
 # ── ReportLab ──
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import cm
+from reportlab.lib.units import cm, mm
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_JUSTIFY
 from reportlab.lib.styles import ParagraphStyle
@@ -368,7 +368,7 @@ RECS = [
 for p, s, t, d in RECS:
     story.append(KeepTogether([
         Paragraph(f'{badge(s)} <b>{p}</b> - {t}', sBL),
-        Paragraph(d, sB), Spacer(3*mm)]))
+        Paragraph(d, sB), Spacer(0, 3*mm)]))
 
 # ── 5. Issues GitHub ──
 story.append(H('5. Issues para o GitHub', sH1, 0))
@@ -482,7 +482,7 @@ writer.append_pages_from_reader(reader_cover)
 writer.append_pages_from_reader(reader_body)
 with open(OUT_PDF, 'wb') as f:
     writer.write(f)
-print(f'[merged] {OUT_PDF} ({os.path.getsize(OUT_PDF)} bytes, {reader_body.num_pages + reader_cover.num_pages} pages)')
+print(f'[merged] {OUT_PDF} ({os.path.getsize(OUT_PDF)} bytes, {reader_body.get_num_pages() + reader_cover.get_num_pages()} pages)')
 
 # Cleanup temp files
 for f in [BODY_PDF, COVER_HTML, COVER_PDF, CHART_DONUT, CHART_BAR]:
