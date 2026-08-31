@@ -1,5 +1,4 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { randomBytes } from "crypto";
 
 // Valores permitidos para o cookie subscription_status.
 // Este cookie é um cache de curta duração (5 min) — não é fonte de verdade.
@@ -14,7 +13,13 @@ const ALLOWED_SUB_STATUS_VALUES = new Set(['active', 'cancelled', 'lifetime', 'n
 const NONCE_SIZE = 16; // 128 bits
 
 function generateNonce(): string {
-  return randomBytes(NONCE_SIZE).toString('base64url');
+  // Web Crypto API — compatível com Edge Runtime (Vercel)
+  const buf = new Uint8Array(NONCE_SIZE);
+  crypto.getRandomValues(buf);
+  return btoa(String.fromCharCode(...buf))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
 }
 
 function cspWithValue(nonce: string): string {
