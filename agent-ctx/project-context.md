@@ -244,11 +244,11 @@ Issues: `docs/security-audit/issues-github.md`
 - pre-commit hook + scripts/update-context.sh para atualizacao automatica
 
 --- Ultimos commits ---
+4811481 fix(csp): move CSP to middleware with per-request nonce
 06f9ebe fix(sql): wrap all policies in DO 2436 blocks with EXCEPTION handler
 59651be fix(sql): add DROP POLICY IF EXISTS before profiles_update_own
 6937101 fix: implementar todas as correcoes da auditoria de seguranca (Issues 3-6)
 ad5044b d2c34c47-c0e2-4a86-bb72-3ca916c7dced
-9b1e2d7 chore: adicionar githooks rastreados com script de instalacao
 ## 11. Tarefas Manuais do Usuario
 
 - [x] Executar `supabase/fix-analytics-and-monitoring.sql` no Supabase SQL Editor
