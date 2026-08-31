@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# pre-commit hook — Atualiza agent-ctx/project-context.md automaticamente.
+# Instalacao: cp scripts/githooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+# Ou: bash scripts/githooks/install.sh
+
+PROJECT_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+SCRIPT="$PROJECT_ROOT/scripts/update-context.sh"
+
+if [ -x "$SCRIPT" ]; then
+  "$SCRIPT"
+  cd "$PROJECT_ROOT" && git add agent-ctx/project-context.md 2>/dev/null || true
+fi
+
+exit 0
