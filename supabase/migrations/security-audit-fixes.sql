@@ -31,6 +31,7 @@ CREATE POLICY "projeto_units_coordenador" ON projeto_units
 -- ── Issue 4a: profiles_update_own ──
 -- Permite que usuarios comuns atualizem o proprio perfil
 -- Necessario para o fluxo first-login/change-password funcionar com anon client
+DROP POLICY IF EXISTS "profiles_update_own" ON profiles;
 CREATE POLICY "profiles_update_own" ON profiles
   FOR UPDATE USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
 

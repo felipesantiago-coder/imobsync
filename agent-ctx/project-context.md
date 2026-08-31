@@ -244,11 +244,11 @@ Issues: `docs/security-audit/issues-github.md`
 - pre-commit hook + scripts/update-context.sh para atualizacao automatica
 
 --- Ultimos commits ---
+6937101 fix: implementar todas as correcoes da auditoria de seguranca (Issues 3-6)
 ad5044b d2c34c47-c0e2-4a86-bb72-3ca916c7dced
 9b1e2d7 chore: adicionar githooks rastreados com script de instalacao
 75bd8d6 chore: pre-commit hook para atualizar agent-ctx/project-context.md automaticamente
 e23c828 4ee7d844-df9c-47b7-a170-9390040d9b0c
-d905bec b41cede8-2c34-4168-9d86-19677b8b6d0e
 ## 11. Tarefas Manuais do Usuario
 
 - [x] Executar `supabase/fix-analytics-and-monitoring.sql` no Supabase SQL Editor
