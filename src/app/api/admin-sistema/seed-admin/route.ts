@@ -3,7 +3,11 @@ import { requireAdminSistema } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 
-const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL || "prosperosdirecional@gmail.com";
+const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL;
+
+if (!ADMIN_EMAIL) {
+  console.warn('[seed-admin] SEED_ADMIN_EMAIL nao definido — endpoint desabilitado.');
+}
 const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD || "";
 
 export async function POST(_request: NextRequest) {
@@ -11,9 +15,9 @@ export async function POST(_request: NextRequest) {
   const isAllowed = await requireAdminSistema();
   if (!isAllowed) return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
 
-  if (!ADMIN_PASSWORD) {
+  if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
     return NextResponse.json(
-      { error: "Senha de admin não configurada. Defina SEED_ADMIN_PASSWORD no ambiente." },
+      { error: "Configure SEED_ADMIN_EMAIL e SEED_ADMIN_PASSWORD no ambiente." },
       { status: 500 }
     );
   }

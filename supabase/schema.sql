@@ -38,10 +38,12 @@ CREATE POLICY "Qualquer um pode ver as unidades"
 ON units FOR SELECT
 USING (true);
 
--- Política: apenas usuários autenticados podem EDITAR
+-- Política: apenas admin_sistema pode EDITAR
 CREATE POLICY "Apenas admin pode editar"
 ON units FOR UPDATE
-USING (auth.role() = 'authenticated');
+USING (
+  EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin_sistema')
+);
 
 -- 5. Criar função para atualizar o updated_at automaticamente
 CREATE OR REPLACE FUNCTION update_updated_at()

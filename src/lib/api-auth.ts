@@ -6,14 +6,9 @@
  */
 
 import { createClient } from '@/lib/supabase/server';
-import { requireActiveSubscription, subscriptionDeniedResponse, SubscriptionGuardResult } from '@/lib/subscription-guard';
+import { requireActiveSubscription, subscriptionDeniedResponse } from '@/lib/subscription-guard';
 import { NextResponse } from 'next/server';
 
-// E-mails autorizados como admin (fallback legado)
-const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '')
-  .split(',')
-  .map((e) => e.trim().toLowerCase())
-  .filter((e) => e.length > 0);
 
 /**
  * Verifica se o usuário pode LER dados protegidos.
@@ -50,11 +45,6 @@ export async function requireWriteAccess(): Promise<NextResponse | null> {
     .maybeSingle();
 
   if ((profile as Record<string, unknown> | null)?.role === 'admin_sistema') {
-    return null;
-  }
-
-  // Fallback para e-mail (legado)
-  if (ADMIN_EMAILS.length > 0 && ADMIN_EMAILS.includes(user.email?.toLowerCase() || '')) {
     return null;
   }
 

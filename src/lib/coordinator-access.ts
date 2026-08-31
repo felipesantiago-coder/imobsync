@@ -11,9 +11,10 @@ import { createAdminClient } from '@/lib/supabase/admin';
 
 /**
  * Retorna os IDs dos empreendimentos atribuídos a um coordenador.
- * Retorna null se a tabela não existir (migration ainda não executada).
+ * Retorna [] (acesso negado) se a tabela não existir (migration ainda não executada).
+ * Design fail-closed: na ausência de informação, nega acesso.
  */
-export async function getCoordenadorEmpreendimentos(userId: string): Promise<string[] | null> {
+export async function getCoordenadorEmpreendimentos(userId: string): Promise<string[]> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from('coordenador_empreendimentos')
@@ -24,8 +25,10 @@ export async function getCoordenadorEmpreendimentos(userId: string): Promise<str
   if (error) {
     const code = (error as unknown as Record<string, unknown>)?.code;
     if (code === '42P01') {
-      return null; // tabela não existe = sem restrição
+      console.warn('[coordinator-access] Tabela coordenador_empreendimentos não existe. Acesso negado (fail-closed).');
+      return []; // tabela não existe = acesso negado (fail-closed)
     }
+    console.error('[coordinator-access] Erro ao buscar empreendimentos:', error.message);
     return [];
   }
 
@@ -35,15 +38,13 @@ export async function getCoordenadorEmpreendimentos(userId: string): Promise<str
 
 /**
  * Verifica se um coordenador tem acesso a um empreendimento específico.
- * Retorna true se:
- *   - A tabela não existe (migration não executada) → sem restrição
- *   - O coordenador tem o empreendimento atribuído
+ * Retorna true apenas se o coordenador tem o empreendimento atribuído.
+ * Design fail-closed: se a tabela não existir, retorna false.
  */
 export async function coordenadorHasAccess(
   userId: string,
   empreendimentoId: string
 ): Promise<boolean> {
   const assigned = await getCoordenadorEmpreendimentos(userId);
-  if (assigned === null) return true; // tabela não existe = sem restrição
   return assigned.includes(empreendimentoId);
 }

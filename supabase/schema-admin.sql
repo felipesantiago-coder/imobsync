@@ -59,6 +59,9 @@ CREATE POLICY "profiles_admin_sistema_full" ON public.profiles
     )
   );
 
+CREATE POLICY "profiles_update_own" ON public.profiles
+  FOR UPDATE USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
+
 -- ─────────────────────────────────────────────────────────────
 -- 2. Tabela de empreendimentos
 -- ─────────────────────────────────────────────────────────────
@@ -143,7 +146,12 @@ CREATE POLICY "projeto_units_select" ON public.projeto_units
 CREATE POLICY "projeto_units_coordenador" ON public.projeto_units
   FOR UPDATE USING (
     EXISTS (
-      SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('coordenador', 'admin_sistema')
+      SELECT 1 FROM public.profiles p
+      JOIN coordenador_empreendimentos ce ON ce.coordenador_id = p.id
+      WHERE p.id = auth.uid() AND p.role = 'coordenador'
+        AND ce.empreendimento_id = projeto_units.empreendimento_id
+    ) OR EXISTS (
+      SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin_sistema'
     )
   );
 

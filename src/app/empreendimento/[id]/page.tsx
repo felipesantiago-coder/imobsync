@@ -25,25 +25,23 @@ export default async function EmpreendimentoPage({
 
   if (!emp) redirect("/projetos");
 
-  // Verificar role (resiliente: se tabela não existir, verifica apenas pelo email)
-  let isAdmin = user.email?.toLowerCase() === "prosperosdirecional@gmail.com";
+  // Verificar role via perfil
+  let isAdmin = false;
   let isCoordinator = false;
-  if (!isAdmin) {
-    try {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-      if (profile?.role === "admin_sistema") isAdmin = true;
-      if (profile?.role === "coordenador") {
-        isCoordinator = true;
-        const hasAccess = await coordenadorHasAccess(user.id, id);
-        if (hasAccess) isAdmin = true;
-      }
-    } catch {
-      // Tabela profiles pode não existir — isAdmin já foi definido pelo email check
+  try {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+    if (profile?.role === "admin_sistema") isAdmin = true;
+    if (profile?.role === "coordenador") {
+      isCoordinator = true;
+      const hasAccess = await coordenadorHasAccess(user.id, id);
+      if (hasAccess) isAdmin = true;
     }
+  } catch {
+    // Tabela profiles pode não existir — nega acesso (fail-closed)
   }
 
   // Verificar se existe config de simulador genérico para este empreendimento

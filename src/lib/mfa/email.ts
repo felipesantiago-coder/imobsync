@@ -35,7 +35,7 @@ export async function sendNewDeviceEmail(data: LoginNotificationData): Promise<b
       html: `
         <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
           <h2 style="color: #0D1B2A;">Novo acesso detectado</h2>
-          <p>Olá${data.displayName ? ` ${data.displayName}` : ""},</p>
+          <p>Olá${data.displayName ? ` ${escapeHtml(data.displayName)}` : ""},</p>
           <p>Um novo acesso à sua conta no <strong>ImobSync</strong> foi detectado:</p>
           <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
             <tr>

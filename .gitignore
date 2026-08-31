@@ -70,3 +70,6 @@ public/*-preview.webp
 scripts/imobsync_brand/
 scripts/imobsync_proposal/
 upload/
+
+# Outdated source copy (not part of the active project)
+/imobsync/

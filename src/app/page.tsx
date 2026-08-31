@@ -114,7 +114,8 @@ function LoginForm() {
         return;
       }
 
-      const isAdminEmail = data.user.email?.toLowerCase() === "prosperosdirecional@gmail.com";
+      // Verificacao de admin via role do perfil (sem email hardcoded no bundle)
+      // O trigger handle_new_user cria o perfil antes do primeiro login.
 
       try {
         const supabase = createClient();
@@ -138,6 +139,8 @@ function LoginForm() {
             .maybeSingle();
           if (!errBase) profile = pBase as Record<string, unknown> | null;
         }
+
+        const isAdmin = profile?.role === "admin_sistema";
 
           if (profile?.must_change_password) {
             // Cookie HttpOnly via API — não usa document.cookie
@@ -163,8 +166,7 @@ function LoginForm() {
           }
 
           let hasMfa = profile?.mfa_enabled ?? false;
-          const isAdmin =
-            (!profile && isAdminEmail) || profile?.role === "admin_sistema";
+          // isAdmin ja definido acima via role do perfil
 
           // Executar verificação MFA e subscription em paralelo
           const mfaCheck = !hasMfa

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { timingSafeEqual } from "crypto";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,9 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const secret = searchParams.get("secret");
 
-  if (secret !== process.env.CRON_SECRET) {
+  const expected = Buffer.from(process.env.CRON_SECRET || '', 'utf8');
+  const actual = Buffer.from(secret || '', 'utf8');
+  if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

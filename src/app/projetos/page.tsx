@@ -31,9 +31,18 @@ export default async function ProjetosPage() {
 
   if (!user) redirect("/");
 
-  // Buscar role do usuário
-  const isAdminEmail = user.email?.toLowerCase() === "prosperosdirecional@gmail.com";
-  let userRole = isAdminEmail ? "admin_sistema" : "coordenador";
+  // Buscar role do usuário via perfil
+  let userRole = "coordenador";
+  try {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (profile?.role) userRole = profile.role;
+  } catch {
+    // Tabela profiles pode não existir
+  }
 
   // Ler subscription_status do cookie (definido no login)
   const cookieStore = await cookies();
