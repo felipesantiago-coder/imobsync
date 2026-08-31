@@ -108,22 +108,21 @@ src/
 │   ├── projetos/                         # Lista de projetos do usuario
 │   ├── mfa-*/                            # Fluxos MFA (onboarding, setup, verify)
 │   ├── change-password/                  # Troca de senha (first-login)
-│   └── api/                              # 62 route handlers
-│       ├── admin-sistema/                # ~20 rotas admin (users, assinaturas, analytics, planos, etc.)
+│   └── api/                              # 60 route handlers
+│       ├── admin-sistema/                # ~20 rotas admin
 │       ├── analytics/track/              # Tracking de eventos
 │       ├── auth/                         # Set routing cookie
-│       ├── cron/                         # 4 crons (cleanup, expire, reconcile, record-usage)
-│       ├── mfa/                          # ~10 rotas MFA (TOTP + WebAuthn)
+│       ├── cron/                         # Crons agendados
+│       ├── mfa/                          # Rotas MFA (TOTP + WebAuthn)
 │       ├── subscriptions/                # create, cancel, status, confirm-payment
 │       ├── webhooks/mercadopago/         # Webhook MP (HMAC verificado)
 │       ├── signup-subscribe/             # Signup + primeira assinatura
 │       └── ...                           # units, planos, empreendimentos, download, etc.
 ├── components/
-│   ├── ui/                               # 40+ componentes shadcn/ui
-│   ├── *-dashboard.tsx                   # Dashboards (sales, villa-bianco, vitta, moment, dynamic)
+│   ├── ui/                               # Componentes shadcn/ui
+│   ├── *-dashboard.tsx                   # Dashboards por empreendimento
 │   ├── TurnstileWidget.tsx               # Cloudflare Turnstile
-│   ├── SubscriptionRefresher.tsx          # Refresh cookie de assinatura a cada 5min
-│   └── ...
+│   └── SubscriptionRefresher.tsx          # Refresh cookie de assinatura
 ├── hooks/                                # useTrackEvent, use-mobile, use-toast
 ├── lib/
 │   ├── supabase/                         # client.ts, server.ts, admin.ts
@@ -133,31 +132,15 @@ src/
 │   ├── subscription-guard.ts             # requireActiveSubscription()
 │   ├── coordinator-access.ts             # coordenador_hasAccess()
 │   ├── analytics.ts                      # trackEvent(), trackUnitStatusChange()
-│   ├── mercadopago.ts                    # Clients MP (pre-approval, payment)
-│   ├── rate-limit.ts                     # Rate limiting (por instancia — ineficaz em serverless)
-│   ├── password-validation.ts            # Validacao de forca de senha
-│   ├── db.ts                             # **ARQUIVO MORTO** — importa @prisma/client (nao existe)
+│   ├── mercadopago.ts                    # Clients MP
 │   └── *-data.ts                         # Dados estaticos dos empreendimentos
 └── middleware.ts
 
-supabase/
-├── schema.sql                            # Tabelas principais (units, projeto_units, profiles, etc.)
-├── schema-admin.sql                      # Tabelas admin (projeto_units, coordenadores, etc.)
-├── migrations/                           # Migracao pontual (unique constraint)
-└── fix-analytics-and-monitoring.sql      # Desabilita RLS em analytics (correcao temporaria)
-
-docs/
-└── security-audit/
-    ├── relatorio-auditoria-seguranca.pdf  # Relatorio completo (7 paginas)
-    ├── generate-report.py                 # Script gerador do PDF
-    └── issues-github.md                   # 6 issues prontas para GitHub
-
-scripts/
-└── monitor-usage.mjs                      # Monitor local de invocations serverless
-
-imobsync/                                 # **COPIA DESATUALIZADA** — deve ser removida/.gitignored
+supabase/                                 # Schemas SQL versionados
+docs/security-audit/                       # Auditoria de seguranca (PDF + issues)
+scripts/                                  # Scripts utilitarios (monitor-usage, update-context)
+agent-ctx/                                # Contexto do projeto para ZCode
 ```
-
 ## 5. Schemas SQL Versionados
 
 ### `supabase/schema.sql` (58 linhas)
@@ -244,18 +227,28 @@ Issues: `docs/security-audit/issues-github.md`
 
 ### Sessao 1 — Correcao de Analytics (concluida)
 - 3 bugs encontrados e corrigidos: missing await, RLS bloqueando inserts, sendBeacon Content-Type
-- Arquivos: `src/app/api/analytics/track/route.ts`, `src/lib/analytics.ts`, `src/hooks/useTrackEvent.ts`
+- Arquivos: src/app/api/analytics/track/route.ts, src/lib/analytics.ts, src/hooks/useTrackEvent.ts
 
 ### Sessao 2 — Monitoramento de Invocations (concluida)
-- Script `scripts/monitor-usage.mjs` criado
-- Endpoint cron `src/app/api/cron/record-usage/route.ts` criado
-- SQL `supabase/fix-analytics-and-monitoring.sql` criado (desabilita RLS temporariamente em analytics)
+- Script scripts/monitor-usage.mjs criado
+- Endpoint cron src/app/api/cron/record-usage/route.ts criado
+- SQL supabase/fix-analytics-and-monitoring.sql criado
 
 ### Sessao 3 — Auditoria de Seguranca (concluida)
 - 5 categorias auditadas, 24 achados, 6 issues GitHub
-- PDF: `docs/security-audit/relatorio-auditoria-seguranca.pdf`
+- PDF: docs/security-audit/relatorio-auditoria-seguranca.pdf
 - 3 endpoints de debug removidos
 
+### Sessao 4 — Contexto automatico para ZCode (concluida)
+- agent-ctx/project-context.md criado com contexto completo
+- pre-commit hook + scripts/update-context.sh para atualizacao automatica
+
+--- Ultimos commits ---
+e23c828 4ee7d844-df9c-47b7-a170-9390040d9b0c
+d905bec b41cede8-2c34-4168-9d86-19677b8b6d0e
+dc9fdd6 448fcdf0-9ba3-4720-96d2-6c2a8a298006
+84c4393 37a4c10b-8813-4608-9f69-0ff6d2c424ea
+1822227 3687470c-a62e-4d9b-8aa7-87161526c9c5
 ## 11. Tarefas Manuais do Usuario
 
 - [x] Executar `supabase/fix-analytics-and-monitoring.sql` no Supabase SQL Editor
@@ -265,4 +258,4 @@ Issues: `docs/security-audit/issues-github.md`
 
 ---
 
-*Ultima atualizacao: 2026-08-31*
+*Ultima atualizacao: 2026-08-31
