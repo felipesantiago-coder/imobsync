@@ -9,6 +9,40 @@
 
 import { createAdminClient } from '@/lib/supabase/admin';
 
+// Cache em memória de slug → UUID (dura a vida do function invocation)
+const slugToUuidCache = new Map<string, string>();
+
+/**
+ * Resolve um slug ou UUID de empreendimento para UUID.
+ * Se for UUID (formato xxxxxxxx-xxxx-...), retorna como está.
+ * Se for slug, busca na tabela empreendimentos.
+ */
+async function resolveEmpreendimentoId(slugOrId: string): Promise<string | null> {
+  // Já é UUID?
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(slugOrId)) {
+    return slugOrId;
+  }
+
+  // Cache?
+  const cached = slugToUuidCache.get(slugOrId);
+  if (cached) return cached;
+
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from('empreendimentos')
+    .select('id')
+    .eq('slug', slugOrId)
+    .maybeSingle();
+
+  if (data) {
+    const uuid = (data as { id: string }).id;
+    slugToUuidCache.set(slugOrId, uuid);
+    return uuid;
+  }
+
+  return null;
+}
+
 /**
  * Retorna os IDs dos empreendimentos atribuídos a um coordenador.
  * Retorna [] (acesso negado) se a tabela não existir (migration ainda não executada).
@@ -38,13 +72,17 @@ export async function getCoordenadorEmpreendimentos(userId: string): Promise<str
 
 /**
  * Verifica se um coordenador tem acesso a um empreendimento específico.
+ * Aceita tanto slug ('villa-bianco') quanto UUID.
  * Retorna true apenas se o coordenador tem o empreendimento atribuído.
  * Design fail-closed: se a tabela não existir, retorna false.
  */
 export async function coordenadorHasAccess(
   userId: string,
-  empreendimentoId: string
+  slugOrId: string
 ): Promise<boolean> {
+  const uuid = await resolveEmpreendimentoId(slugOrId);
+  if (!uuid) return false;
+
   const assigned = await getCoordenadorEmpreendimentos(userId);
-  return assigned.includes(empreendimentoId);
+  return assigned.includes(uuid);
 }
