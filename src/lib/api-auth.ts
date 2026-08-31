@@ -7,7 +7,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { requireActiveSubscription, subscriptionDeniedResponse } from '@/lib/subscription-guard';
-import { coordenadorHasAccess } from '@/lib/coordinator-access';
+import { coordenadorHasAccess, isCoordenadorWithAnyEmpreendimento } from '@/lib/coordinator-access';
 import { NextResponse } from 'next/server';
 
 
@@ -53,9 +53,47 @@ export async function requireWriteAccess(): Promise<NextResponse | null> {
 }
 
 /**
- * Verifica se o usuário pode ESCREVER em unidades de um empreendimento.
+ * Verifica se o usuário pode ESCREVER em unidades.
+ * Admin_sistema sempre pode.
+ * Coordenador pode se tiver pelo menos um empreendimento atribuído.
+ *
+ * Usado para tabelas de unidades hardcoded (villa_bianco_units, vitta_units, etc.)
+ * que não têm coluna empreendimento_id para isolamento granular.
+ */
+export async function requireCoordinatorOrAdminWriteAccess(): Promise<NextResponse | null> {
+  const supabase = await createClient();
+  const { data: { user }, error } = await supabase.auth.getUser();
+
+  if (error || !user) {
+    return NextResponse.json({ error: 'Nao autenticado.' }, { status: 401 });
+  }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  const role = (profile as Record<string, unknown> | null)?.role as string | undefined;
+
+  if (role === 'admin_sistema') {
+    return null;
+  }
+
+  if (role === 'coordenador') {
+    const hasAny = await isCoordenadorWithAnyEmpreendimento(user.id);
+    if (hasAny) return null;
+  }
+
+  return NextResponse.json({ error: 'Nao autorizado.' }, { status: 403 });
+}
+
+/**
+ * Verifica se o usuário pode ESCREVER em unidades de um empreendimento específico.
  * Admin_sistema sempre pode. Coordenadores precisam ter o empreendimento atribuído.
- * Retorna null se autorizado, ou uma resposta de erro.
+ * O empreendimentoId pode ser um slug ('villa-bianco') ou UUID.
+ *
+ * Usado para tabelas dinâmicas (projeto_units) que têm coluna empreendimento_id.
  */
 export async function requireWriteAccessForEmpreendimento(empreendimentoId: string): Promise<NextResponse | null> {
   const supabase = await createClient();
@@ -78,7 +116,7 @@ export async function requireWriteAccessForEmpreendimento(empreendimentoId: stri
     return null;
   }
 
-  // Coordenador pode se tiver o empreendimento atribuído
+  // Coordenador: verificar se tem o empreendimento atribuído
   if (role === 'coordenador') {
     const hasAccess = await coordenadorHasAccess(user.id, empreendimentoId);
     if (hasAccess) return null;

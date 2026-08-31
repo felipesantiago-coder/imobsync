@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { requireReadAccess, requireWriteAccessForEmpreendimento } from "@/lib/api-auth";
+import { requireReadAccess, requireCoordinatorOrAdminWriteAccess } from "@/lib/api-auth";
 import { trackUnitStatusChange } from "@/lib/analytics";
 
 export async function GET() {
@@ -32,7 +32,7 @@ export async function GET() {
 export async function PATCH(request: NextRequest) {
   try {
     // Verificar acesso de escrita (admin only)
-    const denied = await requireWriteAccessForEmpreendimento('sales');
+    const denied = await requireCoordinatorOrAdminWriteAccess();
     if (denied) return denied;
 
     const supabase = await createClient();
@@ -94,7 +94,7 @@ export async function PATCH(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const denied = await requireWriteAccessForEmpreendimento('sales');
+    const denied = await requireCoordinatorOrAdminWriteAccess();
     if (denied) return denied;
 
     const supabase = await createClient();

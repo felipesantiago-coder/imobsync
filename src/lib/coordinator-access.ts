@@ -71,6 +71,15 @@ export async function getCoordenadorEmpreendimentos(userId: string): Promise<str
 }
 
 /**
+ * Verifica se um coordenador tem pelo menos um empreendimento atribuído.
+ * Usado para tabelas de unidades hardcoded que não têm empreendimento_id.
+ */
+export async function isCoordenadorWithAnyEmpreendimento(userId: string): Promise<boolean> {
+  const assigned = await getCoordenadorEmpreendimentos(userId);
+  return assigned.length > 0;
+}
+
+/**
  * Verifica se um coordenador tem acesso a um empreendimento específico.
  * Aceita tanto slug ('villa-bianco') quanto UUID.
  * Retorna true apenas se o coordenador tem o empreendimento atribuído.

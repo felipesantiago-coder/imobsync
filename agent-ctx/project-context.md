@@ -244,11 +244,11 @@ Issues: `docs/security-audit/issues-github.md`
 - pre-commit hook + scripts/update-context.sh para atualizacao automatica
 
 --- Ultimos commits ---
+a9a4c40 fix(coordinator): resolve empreendimento slug to UUID before access check
 78f88ff fix(auth): allow coordinators to update unit status in assigned empreendimentos
 3b65c37 fix(csp): revert CSP to next.config.ts with unsafe-inline in script-src
 d1b719c fix(middleware): replace Node.js crypto with Web Crypto API for Edge Runtime compatibility
 cae6833 b086f656-e3e1-4ebc-8090-e7b671347c46
-4811481 fix(csp): move CSP to middleware with per-request nonce
 ## 11. Tarefas Manuais do Usuario
 
 - [x] Executar `supabase/fix-analytics-and-monitoring.sql` no Supabase SQL Editor
