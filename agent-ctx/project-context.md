@@ -244,11 +244,11 @@ Issues: `docs/security-audit/issues-github.md`
 - pre-commit hook + scripts/update-context.sh para atualizacao automatica
 
 --- Ultimos commits ---
+d1b719c fix(middleware): replace Node.js crypto with Web Crypto API for Edge Runtime compatibility
 cae6833 b086f656-e3e1-4ebc-8090-e7b671347c46
 4811481 fix(csp): move CSP to middleware with per-request nonce
 06f9ebe fix(sql): wrap all policies in DO 2436 blocks with EXCEPTION handler
 59651be fix(sql): add DROP POLICY IF EXISTS before profiles_update_own
-6937101 fix: implementar todas as correcoes da auditoria de seguranca (Issues 3-6)
 ## 11. Tarefas Manuais do Usuario
 
 - [x] Executar `supabase/fix-analytics-and-monitoring.sql` no Supabase SQL Editor
