@@ -45,9 +45,7 @@ EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 -- ── Verificacao ──
-SELECT policyname, tablename, cmd,
-       pg_get_expr(qual, oid) as using_expr
-FROM pg_policies p
-JOIN pg_class c ON c.relname = p.tablename
-WHERE p.tablename IN ('units', 'projeto_units', 'profiles')
+SELECT policyname, tablename, cmd
+FROM pg_policies
+WHERE tablename IN ('units', 'projeto_units', 'profiles')
 ORDER BY tablename, cmd;

@@ -244,11 +244,11 @@ Issues: `docs/security-audit/issues-github.md`
 - pre-commit hook + scripts/update-context.sh para atualizacao automatica
 
 --- Ultimos commits ---
+0209d24 fix(analytics): add SQL to diagnose and fix RLS on analytics tables
 19a613e fix(auth): use requireCoordinatorOrAdminWriteAccess for hardcoded unit tables
 a9a4c40 fix(coordinator): resolve empreendimento slug to UUID before access check
 78f88ff fix(auth): allow coordinators to update unit status in assigned empreendimentos
 3b65c37 fix(csp): revert CSP to next.config.ts with unsafe-inline in script-src
-d1b719c fix(middleware): replace Node.js crypto with Web Crypto API for Edge Runtime compatibility
 ## 11. Tarefas Manuais do Usuario
 
 - [x] Executar `supabase/fix-analytics-and-monitoring.sql` no Supabase SQL Editor
@@ -258,4 +258,4 @@ d1b719c fix(middleware): replace Node.js crypto with Web Crypto API for Edge Run
 
 ---
 
-*Ultima atualizacao: 2026-08-31
+*Ultima atualizacao: 2026-09-01

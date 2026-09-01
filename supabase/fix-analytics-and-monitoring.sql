@@ -1,30 +1,36 @@
 -- ============================================
--- ImobSync — Correção Analytics + Tabela de Monitoramento
+-- ImobSync — Analytics completo (tabelas + RLS + índices)
 -- Execute este SQL no SQL Editor do Supabase
 -- ============================================
+-- NOTA: Este arquivo foi consolidado.
+-- Use supabase/migrations/fix-analytics-rls.sql que é mais completo.
 
--- ══════════════════════════════════════════════
--- PARTE 1: Corrigir RLS das tabelas de analytics
--- ══════════════════════════════════════════════
---
--- PROBLEMA: As tabelas analytics_events e unit_status_history
--- provavelmente foram criadas via dashboard do Supabase com
--- RLS habilitado por padrão, mas sem políticas INSERT/SELECT.
--- Resultado: todos os inserts via anon-key falhavam silenciosamente.
---
--- SOLUÇÃO: Desabilitar RLS nessas tabelas.
--- As rotas de API já fazem validação de autenticação antes de
--- inserir, e os inserts agora usam service_role (admin client)
--- que bypass RLS. Mas desabilitar RLS também protege contra
--- problemas futuros se alguém acidentalmente voltar a usar anon key.
+-- ═══ Criar tabelas se não existirem ═══
 
--- Verificar se RLS está habilitado e desabilitar
-ALTER TABLE IF EXISTS analytics_events DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS unit_status_history DISABLE ROW LEVEL SECURITY;
+CREATE TABLE IF NOT EXISTS analytics_events (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id),
+  role TEXT NOT NULL DEFAULT 'comum',
+  event_type TEXT NOT NULL,
+  resource_type TEXT,
+  resource_id TEXT,
+  metadata JSONB DEFAULT '{}'::jsonb,
+  ip_address TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
--- ══════════════════════════════════════════════
--- PARTE 2: Criar tabela de monitoramento de uso
--- ══════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS unit_status_history (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  unit_id UUID,
+  empreendimento_id UUID,
+  unidade TEXT NOT NULL,
+  bloco TEXT NOT NULL DEFAULT '',
+  status_anterior TEXT,
+  status_novo TEXT NOT NULL,
+  changed_by UUID REFERENCES auth.users(id),
+  changed_by_role TEXT NOT NULL DEFAULT 'comum',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
 CREATE TABLE IF NOT EXISTS daily_usage_metrics (
   date DATE PRIMARY KEY,
@@ -36,25 +42,27 @@ CREATE TABLE IF NOT EXISTS daily_usage_metrics (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Sem RLS — tabela apenas escrita por cron (service_role)
+-- ═══ Desabilitar RLS ═══
+ALTER TABLE analytics_events DISABLE ROW LEVEL SECURITY;
+ALTER TABLE unit_status_history DISABLE ROW LEVEL SECURITY;
 ALTER TABLE daily_usage_metrics DISABLE ROW LEVEL SECURITY;
 
--- Índice para consultas por data
+-- ═══ Índices ═══
+CREATE INDEX IF NOT EXISTS idx_analytics_events_created_at ON analytics_events(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_analytics_events_user_id ON analytics_events(user_id);
+CREATE INDEX IF NOT EXISTS idx_analytics_events_event_type ON analytics_events(event_type);
+CREATE INDEX IF NOT EXISTS idx_unit_status_history_created_at ON unit_status_history(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_unit_status_history_emp_id ON unit_status_history(empreendimento_id);
 CREATE INDEX IF NOT EXISTS idx_daily_usage_date ON daily_usage_metrics(date DESC);
 
--- ══════════════════════════════════════════════
--- PARTE 3: Verificação (execute após as correções)
--- ══════════════════════════════════════════════
-
--- Verificar se as tabelas existem e RLS está desabilitado
+-- ═══ Verificação ═══
 SELECT
   tablename,
-  rowsecurity
+  rowsecurity as rls_enabled
 FROM pg_tables
 WHERE tablename IN ('analytics_events', 'unit_status_history', 'daily_usage_metrics')
 ORDER BY tablename;
 
--- Verificar se há dados em analytics_events
 SELECT
   COUNT(*) as total_eventos,
   COUNT(DISTINCT user_id) as usuarios_unicos,
@@ -62,7 +70,6 @@ SELECT
   MAX(created_at) as ultimo_evento
 FROM analytics_events;
 
--- Verificar contagem por tipo de evento
 SELECT
   event_type,
   COUNT(*) as total,
