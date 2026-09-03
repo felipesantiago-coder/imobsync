@@ -132,7 +132,7 @@ export async function POST(request: NextRequest) {
     const imagemUrl = `${urlData.publicUrl}?t=${Date.now()}`;
 
     // Atualizar URL no banco
-    const { err } = await db
+    const { error: err } = await db
       .from("empreendimentos")
       .update({ imagem_url: imagemUrl })
       .eq("id", empreendimentoId);

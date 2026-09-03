@@ -57,7 +57,7 @@ export async function GET() {
         subscription: {
           id: assinatura.id,
           status: assinatura.status,
-          planoNome: (assinatura.plano as Record<string, unknown>)?.nome || 'Plano',
+          planoNome: (assinatura.plano as unknown as Record<string, unknown>)?.nome || 'Plano',
         },
         profile: {
           displayName: profile?.display_name || '',

@@ -676,7 +676,7 @@ export default function MomentDashboard({ isAdmin = false, isCoordinator = false
   // ─── Dashboard view tracking ───
   useEffect(() => {
     track({ event_type: "dashboard_view", resource_type: "empreendimento", metadata: { empreendimento: "moment" } });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   // Buscar dados do Supabase via API + Realtime

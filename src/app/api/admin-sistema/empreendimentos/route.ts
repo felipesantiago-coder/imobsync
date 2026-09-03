@@ -12,7 +12,7 @@ export async function GET() {
     const supabase = await createClient();
 
     // Query única com aggregate — evita N+1 queries separadas por empreendimento
-    const { data, err } = await supabase
+    const { data, error: err } = await supabase
       .from("empreendimentos")
       .select(`
         *,
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
 
     const slug = generateSlug(nome);
 
-    const { data, err } = await supabase
+    const { data, error: err } = await supabase
       .from("empreendimentos")
       .insert({
         nome: nome.trim(),
@@ -105,7 +105,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Campo 'id' é obrigatório" }, { status: 400 });
     }
 
-    const { err } = await supabase.from("empreendimentos").delete().eq("id", id);
+    const { error: err } = await supabase.from("empreendimentos").delete().eq("id", id);
 
     if (err) {
       console.error("Erro ao remover empreendimento:", err.message);

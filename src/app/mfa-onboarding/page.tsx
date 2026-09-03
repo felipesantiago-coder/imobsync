@@ -292,7 +292,7 @@ export default function MfaOnboardingPage() {
                 {/* QR Code */}
                 <div className="flex justify-center">
                   <div className="inline-block p-4 bg-white rounded-2xl border border-gray-200 shadow-sm">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    { }
                     <img src={qrDataUrl} alt="QR Code" className="w-52 h-52" />
                   </div>
                 </div>

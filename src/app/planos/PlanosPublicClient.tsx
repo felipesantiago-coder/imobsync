@@ -49,7 +49,21 @@ export default function PlanosPublicClient({ planos }: PlanosPublicClientProps) 
 
   // Cupom
   const [cupomInput, setCupomInput] = useState('');
-  const [cupomValido, setCupomValido] = useState<Record<string, unknown> | null>(null);
+  // DTO matching the /api/cupons/validate success response (boundary contract).
+  interface CupomValidoResponse {
+    valid: boolean;
+    cupom: {
+      id: string;
+      codigo: string;
+      tipo_desconto: string;
+      valor_desconto: number;
+      usos_restantes: number | null;
+    };
+    plano: { id: string; nome: string };
+    calculo: { valor_original: number; valor_descontado: number; valor_final: number };
+    error?: string;
+  }
+  const [cupomValido, setCupomValido] = useState<CupomValidoResponse | null>(null);
   const [cupomLoading, setCupomLoading] = useState(false);
   const [cupomId, setCupomId] = useState<string | null>(null);
 
@@ -87,7 +101,7 @@ export default function PlanosPublicClient({ planos }: PlanosPublicClientProps) 
     setCupomId(null);
     try {
       const res = await fetch(`/api/cupons/validate?codigo=${encodeURIComponent(cupomInput.trim())}&planoId=${selectedPlano.id}`);
-      const data = await res.json();
+      const data = (await res.json()) as CupomValidoResponse;
       if (data.valid) {
         setCupomValido(data);
         setCupomId(data.cupom.id);

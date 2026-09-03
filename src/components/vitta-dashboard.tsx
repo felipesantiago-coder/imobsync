@@ -119,10 +119,14 @@ const UnitCard = memo(function UnitCard({
   const [flipping, setFlipping] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Reset flip when update mode is deactivated
-  useEffect(() => {
+  // Reset flip when update mode is deactivated.
+  // Official React pattern for prop-driven state reset: adjust state during
+  // render (instead of setState-in-effect, which causes cascading renders).
+  const [prevUpdateMode, setPrevUpdateMode] = useState(updateMode);
+  if (prevUpdateMode !== updateMode) {
+    setPrevUpdateMode(updateMode);
     if (!updateMode) setFlipping(false);
-  }, [updateMode]);
+  }
 
 
   const handleCardClick = (e: React.MouseEvent) => {
@@ -627,7 +631,7 @@ export default function VittaDashboard({ isAdmin = false, isCoordinator = false,
   // ─── Dashboard view tracking ───
   useEffect(() => {
     track({ event_type: "dashboard_view", resource_type: "empreendimento", metadata: { empreendimento: "vitta" } });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   // Carregar unidades do banco (fallback para dados estáticos)

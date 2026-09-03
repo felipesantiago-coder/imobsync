@@ -148,6 +148,12 @@ export async function POST(request: NextRequest) {
       assinaturaId = newAssinatura.id;
     }
 
+    // Defensive guard: assinaturaId is always set by the branch above; this
+    // satisfies the createMpPreference contract without changing behavior.
+    if (!assinaturaId) {
+      return NextResponse.json({ error: 'Erro ao preparar assinatura.' }, { status: 500 });
+    }
+
     // Criar Preference no MP (suporta PIX, cartão, boleto)
     const mpResult = await createMpPreference({
       planoId,

@@ -8,7 +8,7 @@ export interface VillaBiancoUnit {
   vagas: number;
   area: number;
   areaStr: string;
-  valorVenda: number;
+  valorVenda: number | null;
   valorStr: string;
   valorFormatado: string;
   tipologia: string;

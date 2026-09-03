@@ -129,7 +129,7 @@ export async function POST(request: NextRequest) {
     }
 
     const validStatuses = ["disponivel", "reservado", "vendido"];
-    const results = [];
+    const results: unknown[] = [];
 
     for (const update of updates) {
       if (!update.unidade) {

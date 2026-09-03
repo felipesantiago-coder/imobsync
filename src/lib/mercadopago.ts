@@ -128,7 +128,7 @@ export interface AssinaturaDB {
   plano_id: string;
   mercadopago_subscription_id: string | null;
   mercadopago_payer_id: string | null;
-  status: 'pending' | 'active' | 'cancelled' | 'paused' | 'expired' | 'cancelled_by_user';
+  status: 'pending' | 'active' | 'cancelled' | 'paused' | 'expired' | 'cancelled_by_user' | 'lifetime';
   metodo_pagamento: string | null;
   data_inicio: string | null;
   data_fim: string | null;
@@ -286,7 +286,7 @@ export async function createMpPlan(params: {
       throw new Error('Mercado Pago não retornou ID do plano.');
     }
 
-    console.log('[createMpPlan] Plano criado:', response.id, '| init_point:', (response as Record<string, unknown>).init_point || 'não retornado');
+    console.log('[createMpPlan] Plano criado:', response.id, '| init_point:', (response as unknown as Record<string, unknown>).init_point || 'não retornado');
     return response.id;
   } catch (err: unknown) {
     // Capturar erro detalhado da API do Mercado Pago
@@ -354,8 +354,8 @@ export async function createTempMpPlan(params: {
       throw new Error('Mercado Pago não retornou ID do plano temporário.');
     }
 
-    const initPoint = (response as Record<string, unknown>).init_point as string | undefined;
-    const pma = (response as Record<string, unknown>).payment_methods_allowed;
+    const initPoint = (response as unknown as Record<string, unknown>).init_point as string | undefined;
+    const pma = (response as unknown as Record<string, unknown>).payment_methods_allowed;
     console.log('[createTempMpPlan] Plano criado:', response.id, '| valor:', params.preco);
     console.log('[createTempMpPlan] init_point:', initPoint || 'NÃO RETORNADO');
     console.log('[createTempMpPlan] payment_methods_allowed (resposta MP):', JSON.stringify(pma));
@@ -365,12 +365,12 @@ export async function createTempMpPlan(params: {
       name?: string; status?: number; message?: string;
       causes?: Array<{ code?: string; description?: string }>;
     };
-    const mpStatus = err?.status;
+    const mpStatus = mpErr?.status;
     const mpMessage =
-      (err?.causes && err.causes.length > 0
-        ? err.causes.map(c => c.description).filter(Boolean).join('; ')
+      (mpErr?.causes && mpErr.causes.length > 0
+        ? mpErr.causes.map(c => c.description).filter(Boolean).join('; ')
         : '') ||
-      err?.message || 'Erro desconhecido';
+      mpErr?.message || 'Erro desconhecido';
     console.error('[createTempMpPlan] Falha:', { status: mpStatus, message: mpMessage });
     throw new Error(`Mercado Pago API (${mpStatus || 'sem status'}): ${mpMessage}`);
   }
@@ -503,7 +503,7 @@ export async function createMpSubscription(params: {
       body: preApprovalBody,
     });
 
-    const preApproval = preApprovalResponse as Record<string, unknown>;
+    const preApproval = preApprovalResponse as unknown as Record<string, unknown>;
     const initPoint = (preApproval.init_point as string) || '';
     const preApprovalId = String(preApproval.id || '');
 
@@ -600,7 +600,7 @@ export async function createMpPreference(params: {
       },
     });
 
-    const pref = response as Record<string, unknown>;
+    const pref = response as unknown as Record<string, unknown>;
     const initPoint = (pref.init_point as string) || '';
     const prefId = String(pref.id || '');
 

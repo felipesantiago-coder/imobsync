@@ -22,12 +22,21 @@ export default async function AguardandoPagamentoPage() {
   if (assinaturaAtiva) redirect('/projetos');
 
   // Buscar assinatura pendente para mostrar info
-  const { data: assinaturaPendente } = await supabase
+  // PostgREST returns many-to-one embeds as an object; supabase-js without
+  // generated DB types infers an array, so we assert the real shape at the boundary.
+  const { data: assinaturaPendenteRaw } = await supabase
     .from('assinaturas')
     .select('id, status, created_at, plano:planos(nome, preco)')
     .eq('user_id', user.id)
     .in('status', ['pending', 'paused'])
     .maybeSingle();
+
+  const assinaturaPendente = assinaturaPendenteRaw as unknown as {
+    id: string;
+    status: string;
+    created_at: string;
+    plano: { nome: string; preco: number } | null;
+  } | null;
 
   const { data: profile } = await supabase
     .from('profiles')

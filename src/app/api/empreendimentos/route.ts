@@ -16,7 +16,7 @@ export async function GET() {
     const supabase = await createClient();
 
     // Query 1: Buscar empreendimentos ativos
-    const { data: emps, err } = await supabase
+    const { data: emps, error: err } = await supabase
       .from("empreendimentos")
       .select("id, nome, slug, regiao, imagem_url, descricao, ativo, created_at")
       .eq("ativo", true)
