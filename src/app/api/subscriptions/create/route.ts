@@ -38,9 +38,10 @@ export async function POST(request: NextRequest) {
     const adminClient = createAdminClient();
 
     // 1. Buscar o plano
+    // Somente as colunas consumidas abaixo (audit: trocar select(*) por campos)
     const { data: plano, error: planoErr } = await adminClient
       .from('planos')
-      .select('*')
+      .select('id, nome, preco, periodo_meses')
       .eq('id', planoId)
       .eq('ativo', true)
       .single();
@@ -82,7 +83,7 @@ export async function POST(request: NextRequest) {
       const hoje = new Date().toISOString().slice(0, 10);
       const { data: cupom } = await adminClient
         .from('cupons')
-        .select('*')
+        .select('id, codigo, ativo, tipo_desconto, valor_desconto, planos_ids, usos_maximos, usos_atuais, valido_a_partir, valido_ate')
         .eq('id', cupomId)
         .maybeSingle();
 

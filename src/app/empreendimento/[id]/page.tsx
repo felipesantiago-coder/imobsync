@@ -16,10 +16,11 @@ export default async function EmpreendimentoPage({
 
   if (!user) redirect("/");
 
-  // Buscar detalhes do empreendimento
+  // Buscar detalhes do empreendimento — somente campos consumidos abaixo
+  // (nome/slug; o id vem do próprio route param) (audit: trocar select(*))
   const { data: emp } = await supabase
     .from("empreendimentos")
-    .select("*")
+    .select("id, nome, slug")
     .eq("id", id)
     .single();
 

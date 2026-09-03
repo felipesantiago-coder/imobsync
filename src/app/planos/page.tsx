@@ -44,7 +44,7 @@ export default async function PlanosPage() {
     const adminClient = createAdminClient();
     const { data: planosData } = await adminClient
       .from('planos')
-      .select('*')
+      .select('id, nome, descricao, periodo_meses, preco, features, popular, maior_economia, ativo, ordem, mercadopago_plan_id')
       .eq('ativo', true)
       .order('ordem', { ascending: true });
 
