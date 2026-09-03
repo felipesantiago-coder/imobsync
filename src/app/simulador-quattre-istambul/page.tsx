@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useTrackEvent } from "@/hooks/useTrackEvent";
@@ -692,10 +693,10 @@ function SimulatorContent() {
                 <p className="text-xs text-slate-500 font-medium hidden sm:block">Simulador de Fluxo de Pagamento</p>
               </div>
             </div>
-            <a href="/" className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium flex items-center gap-2">
+            <Link href="/" className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium flex items-center gap-2">
               <span className="hidden sm:inline">← Voltar ao ImobSync</span>
               <span className="sm:hidden">Voltar</span>
-            </a>
+            </Link>
           </div>
         </div>
       </header>

@@ -626,7 +626,9 @@ export default function AdminSistemaClient() {
   // ─── Logout ────────────────────────────────────────────────────────────────
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    router.push("/");
+    // replace: logout transition must not stay in history (audit P2.6)
+    // refresh kept: purges client Router Cache of authenticated routes
+    router.replace("/");
     router.refresh();
   };
 

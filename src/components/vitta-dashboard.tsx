@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import React, { useState, useCallback, useMemo, useEffect, memo } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -769,7 +770,9 @@ export default function VittaDashboard({ isAdmin = false, isCoordinator = false,
 
   const handleLogout = useCallback(async () => {
     await createClient().auth.signOut();
-    router.push("/");
+    // replace: logout transition must not stay in history (audit P2.6)
+    // refresh kept: purges client Router Cache of authenticated routes
+    router.replace("/");
     router.refresh();
   }, [router]);
 
@@ -822,10 +825,10 @@ export default function VittaDashboard({ isAdmin = false, isCoordinator = false,
               </div>
               {/* Desktop actions */}
               <div className="hidden sm:flex items-center gap-2">
-                <a href="/projetos" className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors">
+                <Link href="/projetos" className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors">
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
                   Projetos
-                </a>
+                </Link>
                 {isCoordinator && isAdmin && (
                   <button onClick={() => setUpdateMode(!updateMode)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${updateMode ? "bg-amber-500/25 text-amber-300 border-amber-500/40 shadow-lg shadow-amber-500/10" : "bg-white/5 text-gray-400 border-white/10 hover:bg-white/10 hover:text-white"}`} title={updateMode ? "Desativar modo de atualização" : "Ativar modo de atualização"}>
                     <Pencil className="w-3.5 h-3.5" />
