@@ -124,7 +124,9 @@ com `-url:challenges.cloudflare.com` (ou "Hide network"/níveis de verbose).
 
 ## Quando se preocupar de verdade
 
-Sinais de problema real na integração Turnstile (nenhum presente no relato):
+Sinais de problema real na integração Turnstile (nenhum presente no relato) e
+o **passo a passo completo de diagnóstico/correção** estão no runbook:
+`docs/diagnostics/turnstile-troubleshooting-runbook.md`. Resumo dos sinais:
 
 - Erro de CSP apontando para o app bloqueando o iframe (`frame-src`);
 - Token sempre `null` + warnings `[Login] Turnstile verification failed` no

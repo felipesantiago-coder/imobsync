@@ -69,8 +69,20 @@ export function useTurnstile() {
       widgetIdRef.current = window.turnstile.render(widgetRef.current, {
         sitekey: siteKey!,
         callback: (tok: string) => setToken(tok),
-        "error-callback": () => setToken(null),
-        "expired-callback": () => setToken(null),
+        // Log do código de erro real do Turnstile (ver runbook de diagnóstico:
+        // docs/diagnostics/turnstile-troubleshooting-runbook.md)
+        "error-callback": (errorCode?: string) => {
+          console.warn(
+            `[Turnstile] erro no widget: ${errorCode ?? "código não informado"}`
+          );
+          setToken(null);
+        },
+        "expired-callback": () => {
+          console.warn(
+            "[Turnstile] token expirado antes do uso — novo desafio necessário"
+          );
+          setToken(null);
+        },
         size: "invisible",
         execution: "render",
       });
@@ -90,6 +102,11 @@ export function useTurnstile() {
           interval = undefined;
           if (typeof window.turnstile !== "undefined") {
             renderWidget();
+          } else {
+            // Script não chegou em 3s — quase sempre rede/adblock/CSP.
+            console.warn(
+              "[Turnstile] script challenges.cloudflare.com não carregou em 3s — verifique rede, adblock ou CSP (runbook: docs/diagnostics/turnstile-troubleshooting-runbook.md)"
+            );
           }
         }
       }, 100);
