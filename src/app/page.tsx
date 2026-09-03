@@ -57,7 +57,12 @@ function LoginForm() {
     if (reason === "login_error") return "Erro inesperado. Tente novamente.";
     return "";
   });
-  const { token: turnstileToken, reset: resetTurnstile, widgetRef } = useTurnstile();
+  const {
+    token: turnstileToken,
+    reset: resetTurnstile,
+    widgetRef,
+    awaitTurnstileToken,
+  } = useTurnstile();
 
   const [activeFeature, setActiveFeature] = useState(0);
 
@@ -74,22 +79,59 @@ function LoginForm() {
     setError("");
 
     try {
-      // Verificação Turnstile (anti-bot) — não-bloqueante (defense-in-depth)
-      // Se falhar, loga o incidente mas permite o login.
-      // A segurança primária vem do Supabase Auth + MFA.
+      // Verificação Turnstile — política em camadas
+      // (runbook: docs/diagnostics/turnstile-troubleshooting-runbook.md)
+      //   • veredicto negativo com token válido → BLOQUEIA após 1 retry com
+      //     token regenerado (fail-closed; cobre expiração legítima >5 min)
+      //   • infraestrutura (CF fora, secret, rede) → o SERVIDOR já responde
+      //     fail-open; aqui 403 é o único sinal de bloqueio
+      //   • widget indisponível no cliente (ex.: adblock) → segue sem token
+      //     (fail-open) — disponibilidade primeiro
       if (turnstileToken && turnstileToken !== "bypass") {
-        try {
-          const turnstileRes = await fetch('/api/turnstile-verify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: turnstileToken }),
-          });
-          if (!turnstileRes.ok) {
-            console.warn('[Login] Turnstile verification failed, proceeding with login');
+        const verifyOnce = async (
+          tok: string
+        ): Promise<"ok" | "blocked" | "infra"> => {
+          try {
+            const res = await fetch('/api/turnstile-verify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token: tok }),
+            });
+            if (res.status === 403) return "blocked";
+            if (res.ok) return "ok";
+            return "infra";
+          } catch {
+            return "infra";
           }
-        } catch {
-          // Turnstile indisponível — não bloqueia login
+        };
+
+        let verdict = await verifyOnce(turnstileToken);
+        if (verdict === "blocked") {
+          // Token pode ter expirado (>5 min na página) ou sido reutilizado —
+          // regenera e tenta uma única vez antes de bloquear o usuário.
+          console.warn(
+            '[Login] Turnstile recusou o token — regenerando e tentando 1× novamente'
+          );
+          resetTurnstile();
+          const freshToken = await awaitTurnstileToken(8000);
+          verdict = freshToken ? await verifyOnce(freshToken) : "infra";
+          if (verdict === "blocked") {
+            console.error(
+              '[Login] Turnstile: veredicto negativo persistente — login bloqueado'
+            );
+            setError(
+              "Verificação de segurança falhou. Recarregue a página e tente novamente."
+            );
+            setLoading(false);
+            resetTurnstile();
+            return;
+          }
         }
+      } else if (turnstileToken === null) {
+        // Widget configurado mas sem token (não carregou/resolveu — ex.: adblock)
+        console.warn(
+          '[Login] Turnstile indisponível no cliente (sem token) — seguindo (fail-open)'
+        );
       }
 
       const { data, error } = await createClient().auth.signInWithPassword({

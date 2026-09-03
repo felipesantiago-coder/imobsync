@@ -26,10 +26,19 @@ import { useCallback, useEffect, useRef, useState } from "react";
  */
 export function useTurnstile() {
   const [token, setToken] = useState<string | null>(null);
+  // Espelho em ref: o submit precisa ler o token mais recente sem depender
+  // do closure do render (e serve para aguardar token novo após reset).
+  const tokenRef = useRef<string | null>(null);
+  const errorRef = useRef(false);
   const widgetRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
   const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
   const isConfigured = Boolean(siteKey && siteKey !== "" && siteKey !== "placeholder");
+
+  const setTokenState = useCallback((value: string | null) => {
+    tokenRef.current = value;
+    setToken(value);
+  }, []);
 
   // Carregar o script do Turnstile uma vez
   useEffect(() => {
@@ -68,20 +77,24 @@ export function useTurnstile() {
 
       widgetIdRef.current = window.turnstile.render(widgetRef.current, {
         sitekey: siteKey!,
-        callback: (tok: string) => setToken(tok),
+        callback: (tok: string) => {
+          errorRef.current = false;
+          setTokenState(tok);
+        },
         // Log do código de erro real do Turnstile (ver runbook de diagnóstico:
         // docs/diagnostics/turnstile-troubleshooting-runbook.md)
         "error-callback": (errorCode?: string) => {
           console.warn(
             `[Turnstile] erro no widget: ${errorCode ?? "código não informado"}`
           );
-          setToken(null);
+          errorRef.current = true;
+          setTokenState(null);
         },
         "expired-callback": () => {
           console.warn(
             "[Turnstile] token expirado antes do uso — novo desafio necessário"
           );
-          setToken(null);
+          setTokenState(null);
         },
         size: "invisible",
         execution: "render",
@@ -130,15 +143,49 @@ export function useTurnstile() {
     if (widgetIdRef.current !== null && typeof window.turnstile !== "undefined") {
       window.turnstile.reset(widgetIdRef.current);
     }
-    setToken(null);
-  }, []);
+    errorRef.current = false;
+    setTokenState(null);
+  }, [setTokenState]);
+
+  /**
+   * Aguarda um token novo (após reset) por até timeoutMs. Resolve null se
+   * o widget sinalizar erro ou estourar o timeout — o chamador decide o
+   * fallback (fail-open).
+   */
+  const awaitTurnstileToken = useCallback(
+    (timeoutMs = 8000) =>
+      new Promise<string | null>((resolve) => {
+        if (tokenRef.current) {
+          resolve(tokenRef.current);
+          return;
+        }
+        const startedAt = Date.now();
+        const poll = setInterval(() => {
+          if (tokenRef.current) {
+            clearInterval(poll);
+            resolve(tokenRef.current);
+            return;
+          }
+          if (errorRef.current || Date.now() - startedAt >= timeoutMs) {
+            clearInterval(poll);
+            resolve(null);
+          }
+        }, 100);
+      }),
+    []
+  );
 
   // Se não configurado, sempre retorna token de bypass
   if (!isConfigured) {
-    return { token: "bypass", reset: () => {}, widgetRef: { current: null } };
+    return {
+      token: "bypass" as string | null,
+      reset: () => {},
+      widgetRef: { current: null },
+      awaitTurnstileToken: async () => null,
+    };
   }
 
-  return { token, reset, widgetRef };
+  return { token, reset, widgetRef, awaitTurnstileToken };
 }
 
 // Tipagem global do Turnstile

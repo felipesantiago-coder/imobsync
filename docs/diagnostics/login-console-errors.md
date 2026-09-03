@@ -64,8 +64,11 @@ navegador (Google Tag Assistant). Não há ação de correção aplicável no ap
   `size: "invisible"`, `execution: "render"`, callbacks de `error` e
   `expired` resetando o token; cleanup correto no unmount. Padrão oficial.
 - **Verificação server-side** (`src/app/api/turnstile-verify/route.ts`):
-  valida o token via `siteverify`; falha do Turnstile é não-bloqueante por
-  design (defense-in-depth — a segurança primária é Supabase Auth + MFA).
+  valida o token via `siteverify` com **política em camadas** — veredicto
+  negativo com token válido **bloqueia** o login (fail-closed, após 1 retry
+  do cliente); infraestrutura/sem token **fail-open** (disponibilidade).
+  Detalhes e tabela de códigos no runbook
+  `docs/diagnostics/turnstile-troubleshooting-runbook.md`.
 
 ## Confirmação empírica (reteste do relator)
 

@@ -12,10 +12,18 @@ ou *seguir* para o próximo passo.
 **Contexto rápido:** o login usa widget invisível (`render=explicit`,
 `size: "invisible"`, `execution: "render"`) em
 `src/components/TurnstileWidget.tsx`; o token é verificado server-side em
-`src/app/api/turnstile-verify/route.ts` via `siteverify` do Cloudflare. A
-falha do Turnstile é **não-bloqueante por design** (defense-in-depth) — o
-login em si depende do Supabase Auth (+ MFA). Triage do ruído de console
-conhecido: `docs/diagnostics/login-console-errors.md`.
+`src/app/api/turnstile-verify/route.ts` via `siteverify` do Cloudflare, com
+**política de enforcement em camadas** (desde 2026-09, ver Passo 5):
+
+- **Veredicto negativo do desafio com token válido** (`invalid-input-response`,
+  `timeout-or-duplicate`) → **bloqueia** o login (fail-closed), após 1 retry
+  do cliente com token regenerado (cobre expiração legítima de >5 min);
+- **Infraestrutura/desconhecido** (Cloudflare fora do ar, secret inválido,
+  rede, adblock no cliente) → **fail-open**: login segue e o incidente é
+  logado — disponibilidade primeiro.
+
+A segurança primária continua sendo Supabase Auth (+ MFA). Triage do ruído
+de console conhecido: `docs/diagnostics/login-console-errors.md`.
 
 ---
 
@@ -42,11 +50,13 @@ Network abertos na página de login, procure por **qualquer um** destes:
 3. Na aba Network: requisições para `challenges.cloudflare.com` com status
    4xx/5xx, bloqueadas (vermelho, `blocked:other`) ou CORS; ou a chamada
    `POST /api/turnstile-verify` retornando **400/403/500**.
-4. `[Login] Turnstile verification failed, proceeding with login` — warning
-   do `page.tsx` confirmando que a verificação falhou no servidor.
-5. No Network, dentro da resposta do `siteverify` (se visível) ou nos logs
-   do servidor: `error-codes` como `invalid-input-secret`,
-   `timeout-or-duplicate` etc. → **Passo 5**.
+4. `[Turnstile] verify sem token — fail-open (no_token)` (log do servidor)
+   — requisição chegou sem token; o cliente legítimo skipa a chamada quando
+   o widget não carrega, então isso indica bot sondando ou contrato quebrado.
+5. No Network, a resposta de `/api/turnstile-verify`: **403** (`blocked:
+   true`) = veredicto negativo → login bloqueado com mensagem "Verificação de
+   segurança falhou…"; **200 com `softFail: true`** = infraestrutura → login
+   segue (veja `reason`/`codes` na resposta e os logs do servidor).
 
 **Decisão:** nenhum sinal acima presente? O Turnstile está saudável — as
 mensagens de ruído podem ser ignoradas (filtro no DevTools:
@@ -183,17 +193,23 @@ começa com `0x4AAAAAAEeWNe8j…` e confira:
    | `{"success":false,"error-codes":["missing-input-secret"]}` | Env var ausente no deploy → configurar no Vercel |
    | erro de rede/DNS | Servidor do deploy sem saída para `challenges.cloudflare.com` → firewall de saída |
 
-3. **Códigos `siteverify` que podem aparecer em produção** (o app não loga o
-   corpo do 403 hoje; se necessário, inspecione temporariamente o
-   `console.warn` em `turnstile-verify/route.ts`, que já imprime
-   `data["error-codes"]` nos logs do servidor):
+3. **Códigos `siteverify` que podem aparecer em produção** — a rota aplica a
+   política em camadas (`src/lib/turnstile-policy.ts`, classificador
+   testado em `tests/turnstile-policy.test.ts`):
 
-   | Código | Causa | Correção |
-   |--------|-------|----------|
-   | `timeout-or-duplicate` | Token com mais de **300 s** ou reutilizado (uso único) | Inofensivo aqui: o login segue; o widget gera novo token via `expired-callback`/`reset` |
-   | `invalid-input-response` | Token falso/adulterado/de outro widget | Investigar origem das chamadas; ok se vier de bot |
-   | `invalid-input-secret` | Secret inválido | Passo 5.1 |
-   | `internal-error` | Falha transitória do Cloudflare | Retry; se persistir, status page do Cloudflare |
+   | Código | Classificação | Comportamento resultante |
+   |--------|---------------|--------------------------|
+   | `invalid-input-response` | **hard** | **403** — cliente regenera token e tenta 1×; persistindo, login bloqueado com "Verificação de segurança falhou" |
+   | `timeout-or-duplicate` | **hard** | **403** — idem (token >300 s ou reutilizado; o retry com token fresco cobre o caso legítimo) |
+   | `invalid-input-secret` | soft | **200 `softFail`** — login segue; **corrija a env var com urgência** (verificação está inativa de fato) |
+   | `missing-input-secret` | soft | **200 `softFail`** — env var ausente no deploy |
+   | `internal-error` | soft | **200 `softFail`** — falha transitória do Cloudflare |
+   | código desconhecido/futuro | soft | **200 `softFail`** — default de disponibilidade |
+
+   Logs do servidor correspondentes: `[Turnstile] verificação recusada
+   (hard): …` (console.error) e `[Turnstile] … fail-open: …` (console.warn).
+   Monitore a frequência de soft-fails: `invalid-input-secret` recorrente
+   significa proteção desativada na prática.
 
 ---
 
@@ -205,10 +221,10 @@ começa com `0x4AAAAAAEeWNe8j…` e confira:
 | Iframe do desafio não renderiza | `frame-src` sem `challenges.cloudflare.com` | Passo 3 |
 | `[Turnstile] erro no widget: 110200` | Domínio não registrado na sitekey | Passo 4.1 |
 | `[Turnstile] erro no widget: 600010` (ou loop de desafio) | Falha de execução do desafio (ambiente/rede interveniente) | Passo 1 e 2; se persistir em rede limpa, coletar HAR e escalar (Passo 7) |
-| `/api/turnstile-verify` 400 (`Token ausente`) | Token chegou `null` no submit (widget não resolveu) | Passo 2/4; confira `[Turnstile] erro no widget` |
-| `/api/turnstile-verify` 403 | Secret inválido ou token rejeitado pelo CF | Passo 5.2 + logs do servidor |
-| `timeout-or-duplicate` frequente | Usuário fica >5 min na página antes de enviar | Esperado; sem ação (login não bloqueia) — se incomodar, migrar para `execution: "execute"` |
-| `[Login] Turnstile verification failed` | Verificação falhou no servidor | Passo 5 (server-side) |
+| `/api/turnstile-verify` 200 `softFail` | Infraestrutura (CF, secret, rede) ou sem token | Login segue; investigue `reason`/`codes` e logs do servidor (Passo 5.3) |
+| `/api/turnstile-verify` 403 | Veredicto negativo persistente (token forjado/reutilizado) | Esperado para bots; usuário legítimo: Passo 1–2 (adblock) e recarregar a página |
+| `[Login] Turnstile: veredicto negativo persistente — login bloqueado` | Cliente confirmou 403 mesmo com token fresco | Passo 5.3 (`invalid-input-response`/`timeout-or-duplicate`) — se afetar usuários reais em massa, revisite hostnames da sitekey (Passo 4) |
+| `[Login] Turnstile indisponível no cliente (sem token) — seguindo` | Widget não resolveu no navegador (adblock/rede) | Fail-open por design; usuários afetados: Passo 1 |
 | Só `TrustedTypePolicy`/`OTS`/`No available adapters` | Ruído conhecido, **não é falha** | Ignorar (Passo 0) |
 
 ---
@@ -243,8 +259,12 @@ Logs que o próprio ImobSync emite, e o que significam:
 | `[Turnstile] erro no widget: <código>` | `error-callback` | O Cloudflare sinalizou falha no desafio; use o código no Passo 6 |
 | `[Turnstile] token expirado antes do uso — novo desafio necessário` | `expired-callback` | Token >300 s sem consumo; o widget regenera no próximo `reset()` |
 | `[Turnstile] script challenges.cloudflare.com não carregou em 3s …` | após polling de 3 s | Script do widget não chegou: rede, adblock ou CSP (Passos 1–3) |
-| `[Login] Turnstile verification failed, proceeding with login` | `page.tsx` | `/api/turnstile-verify` respondeu não-ok; login segue (não-bloqueante por design) |
-| `[Turnstile] Verificação falhou: <error-codes>` | log do servidor (`route.ts`) | `siteverify` recusou o token; ver Passo 5.3 |
+| `[Turnstile] recusou o token — regenerando e tentando 1× novamente` | `page.tsx` | Primeiro 403; cliente regenera token e repete a verificação |
+| `[Turnstile] veredicto negativo persistente — login bloqueado` | `page.tsx` | 403 mesmo com token fresco → login bloqueado com mensagem ao usuário |
+| `[Turnstile] indisponível no cliente (sem token) — seguindo (fail-open)` | `page.tsx` | Widget não resolveu (adblock/rede); login segue por disponibilidade |
+| `[Turnstile] verify sem token — fail-open (no_token)` | log do servidor | Requisição sem token (bot sondando ou contrato quebrado) |
+| `[Turnstile] verificação recusada (hard): <codes>` | log do servidor | `siteverify` negou o token → resposta 403 ao cliente |
+| `[Turnstile] … fail-open: <codes/reason>` | log do servidor | Infraestrutura/sem token → 200 `softFail`; monitorar frequência |
 
 ## Apêndice B — Checklist de QA manual do fluxo completo
 
@@ -253,14 +273,21 @@ Logs que o próprio ImobSync emite, e o que significam:
 2. Abrir `/` (login). **Esperado:** script `api.js` = 200; iframe do desafio
    criado; sem warnings `[Turnstile]`.
 3. Preencher credenciais válidas e enviar. **Esperado:** `POST
-   /api/turnstile-verify` = **200** com `{"valid":true,"bypassed":false}`;
+   /api/turnstile-verify` = **200** com `{"valid":true,"softFail":false}`;
    login prossegue.
 4. Repetir com senha errada. **Esperado:** mensagem "E-mail ou senha
    incorretos" e `resetTurnstile()` acionado (novo desafio na próxima
    tentativa).
-5. (Opcional) Invalidar a `TURNSTILE_SECRET_KEY` em um ambiente de teste para
-   exercitar o caminho de falha: login ainda deve funcionar
-   (não-bloqueante), com os warnings do Apêndice A visíveis.
+5. (Opcional) Exercitar o caminho de bloqueio: intercepte a requisição
+   `/api/turnstile-verify` e troque o token por `XXXX.DUMMY.TOKEN.XXXX` —
+   **esperado:** 403 na 1ª tentativa, retry automático com token novo e,
+   persistindo o 403, mensagem "Verificação de segurança falhou. Recarregue
+   a página e tente novamente." com o log `[Turnstile] veredicto negativo
+   persistente — login bloqueado`.
+6. (Opcional) Invalidar a `TURNSTILE_SECRET_KEY` em um ambiente de teste para
+   exercitar o caminho de infraestrutura: login ainda deve funcionar
+   (fail-open), com `softFail: true` e o warning `[Turnstile] … fail-open:
+   ["invalid-input-secret"]` nos logs do servidor.
 
 ## Apêndice C — Referências oficiais
 
