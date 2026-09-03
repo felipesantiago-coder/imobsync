@@ -67,6 +67,52 @@ navegador (Google Tag Assistant). Não há ação de correção aplicável no ap
   valida o token via `siteverify`; falha do Turnstile é não-bloqueante por
   design (defense-in-depth — a segurança primária é Supabase Auth + MFA).
 
+## Confirmação empírica (reteste do relator)
+
+Reteste em **aba anônima** (extensões desativadas por padrão) confirmou a
+diagnose:
+
+- As mensagens de `content_script_bin.js` / `tag_assistant_api_bin.js`
+  (TrustedTypePolicy `goog#html`) **desapareceram** — provenientes da extensão
+  Google Tag Assistant, não do app.
+- `No available adapters`, `OTS parsing error (WOFF 2.0)` e a linha vazia
+  `invisible?lang=auto:1` **persistiram** — coerente com origem no código do
+  próprio Cloudflare dentro do iframe.
+- Nenhum frame das stack traces aponta para código do ImobSync: todas as
+  entradas vêm de `invisible?lang=auto:1` (documento do desafio) e de workers
+  `blob:https://challenges.cloudflare.com/...`.
+
+## Corroboração pública (busca web, set/2026)
+
+- `No available adapters` aparece em scans públicos do urlscan.io de sites
+  arbitrários que usam desafios Cloudflare (ex.: trackyserver.com,
+  expatguidekorea.com) — ou seja, é ruído ubíquo da plataforma, não um
+  indício de má configuração do ImobSync.
+- Em community.cloudflare.com (thread "Managed Turnstile checkbox challenge
+  and token delay on Android", jul/2026) a mensagem surge em sequência com
+  "Request for the Private Access Token challenge" — o runner sonda adapters
+  (incluindo Private Access Tokens), não encontra disponíveis no ambiente e
+  segue com o desafio padrão. Comportamento de fallback esperado.
+- `OTS parsing error: Size of decompressed WOFF 2.0 is less than compressed
+  size` é aviso genérico do sanitizador OTS do Chrome, documentado em issues
+  públicas (Font-Awesome #20564, StackOverflow, fóruns Cloudflare) com
+  fallback de fonte e sem impacto funcional.
+
+## Por que não dá para "silenciar" via código do app
+
+O iframe do desafio é um **documento de outra origem**
+(`challenges.cloudflare.com`): quem escreve no console é o código do
+Cloudflare executando dentro dele. A página hospedeira (ImobSync) não tem
+como suprimir, capturar ou filtrar console de outro origin — isso é isolamento
+de browser por design. As únicas formas de eliminar essas mensagens seriam:
+
+1. O Cloudflare corrigir/ajustar o próprio runner (fora do nosso controle); ou
+2. Não carregar o widget Turnstile (remove o iframe — e remove a camada
+   anti-bot; decisão de produto/segurança, não de correção de bug).
+
+Filtragem possível apenas no lado do observador: DevTools → Console → Filter
+com `-url:challenges.cloudflare.com` (ou "Hide network"/níveis de verbose).
+
 ## Recomendações (fora do código)
 
 1. Se o ruído atrapalha a depuração, filtrar no DevTools: Console → Filter com
