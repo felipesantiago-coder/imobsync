@@ -255,8 +255,9 @@ async function syncToDedicatedTable(
     let val = matchData[col];
     if (val === undefined || val === null || val === "") return;
     if (config.castUnidadeToInt && col === "unidade") {
-      val = parseInt(String(val), 10);
-      if (isNaN(val)) return;
+      const parsed = parseInt(String(val), 10);
+      if (isNaN(parsed)) return;
+      val = parsed;
     }
     query = query.eq(col, val) as any;
   }

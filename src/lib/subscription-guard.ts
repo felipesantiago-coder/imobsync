@@ -71,7 +71,7 @@ export async function requireActiveSubscription(): Promise<SubscriptionGuardResp
     return {
       valid: true,
       userId: user.id,
-      userEmail: user.email,
+      userEmail: user.email ?? null,
       assinaturaId: '',
       status: 'admin',
       isAdmin: true,
@@ -100,7 +100,7 @@ export async function requireActiveSubscription(): Promise<SubscriptionGuardResp
     return {
       valid: true,
       userId: user.id,
-      userEmail: user.email,
+      userEmail: user.email ?? null,
       assinaturaId: assinatura.id,
       status: 'lifetime',
       isAdmin: false,
@@ -126,7 +126,7 @@ export async function requireActiveSubscription(): Promise<SubscriptionGuardResp
   return {
     valid: true,
     userId: user.id,
-    userEmail: user.email,
+    userEmail: user.email ?? null,
     assinaturaId: assinatura.id,
     status: 'active',
     isAdmin: false,

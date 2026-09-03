@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Building2, ArrowRight, LogOut, MapPin, Shield, ShieldAlert, X, ChevronDown, Fingerprint, QrCode, Crown, Clock } from "lucide-react";
@@ -76,18 +76,57 @@ function formatLastUpdated(isoString: string | null): string {
   return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" }) + ` às ${time}`;
 }
 
+// ── MFA banner external store (localStorage-backed) ─────────────
+// Keeps the dismiss action compatible with the useSyncExternalStore snapshot.
+const MFA_BANNER_DISMISS_TTL = 7 * 24 * 60 * 60 * 1000; // 7 dias
+let mfaBannerListeners: Array<() => void> = [];
+function subscribeMfaBannerStore(listener: () => void) {
+  mfaBannerListeners.push(listener);
+  return () => {
+    mfaBannerListeners = mfaBannerListeners.filter((l) => l !== listener);
+  };
+}
+function notifyMfaBannerStore() {
+  mfaBannerListeners.forEach((l) => l());
+}
+function getMfaBannerSnapshot(initialMfaEnabled: boolean): 1 | 2 {
+  if (initialMfaEnabled) return 2;
+  try {
+    const dismissed = localStorage.getItem("mfa_banner_dismissed");
+    if (dismissed) {
+      const dismissedAt = new Date(dismissed).getTime();
+      if (Date.now() - dismissedAt < MFA_BANNER_DISMISS_TTL) return 2;
+    }
+  } catch {
+    // localStorage indisponível — tratar como não dispensado
+  }
+  return 1;
+}
+
 export default function ProjetosClient({ userRole, initialEmpreendimentos, initialMfaEnabled, lastUpdatedMap = {}, hasActivePlan = false }: ProjetosClientProps) {
   const router = useRouter();
   const [filterRegion, setFilterRegion] = useState<Region | "all">("all");
   const [projects, setProjects] = useState<EmpreendimentoDB[]>(initialEmpreendimentos);
-  const [mounted, setMounted] = useState(false);
+  // Hydration-safe "mounted" flag without setState-in-effect.
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
 
   // MFA banner state
-  const [showMfaBanner, setShowMfaBanner] = useState(false);
+  // Derived from localStorage (external system) via useSyncExternalStore —
+  // replaces the old setState-in-effect pattern with equivalent behavior:
+  // hidden during SSR/hydration, decided on the client right after.
+  // Phase values: 0 = pre-hydration, 1 = show banner, 2 = no banner.
+  const mfaBannerPhase = useSyncExternalStore(
+    subscribeMfaBannerStore,
+    () => getMfaBannerSnapshot(initialMfaEnabled),
+    () => 0
+  );
+  const showMfaBanner = mfaBannerPhase === 1;
+  const mfaChecked = mfaBannerPhase !== 0;
   const [mfaBannerExpanded, setMfaBannerExpanded] = useState(false);
-  const [mfaChecked, setMfaChecked] = useState(false);
-
-  useEffect(() => { setMounted(true); }, []);
 
   // Dados já vieram do servidor — não precisa de fetch
   // Mas se os dados vieram vazios (tabela não populada), faz fetch como fallback
@@ -108,27 +147,7 @@ export default function ProjetosClient({ userRole, initialEmpreendimentos, initi
   }, [initialEmpreendimentos.length]);
 
   // MFA check: usa o valor do servidor (sem chamada extra)
-  useEffect(() => {
-    if (initialMfaEnabled) {
-      setMfaChecked(true);
-      return;
-    }
-
-    // Verificar se o usuário já dispensou o aviso recentemente (7 dias)
-    const dismissed = localStorage.getItem("mfa_banner_dismissed");
-    if (dismissed) {
-      const dismissedAt = new Date(dismissed).getTime();
-      const sevenDays = 7 * 24 * 60 * 60 * 1000;
-      if (Date.now() - dismissedAt < sevenDays) {
-        setMfaChecked(true);
-        return;
-      }
-    }
-
-    // MFA não habilitado — mostrar banner
-    setShowMfaBanner(true);
-    setMfaChecked(true);
-  }, [initialMfaEnabled]);
+  // (decisão movida para o snapshot do useSyncExternalStore acima)
 
   const allRegions = useMemo(
     () => Array.from(new Set(projects.map((p) => p.regiao))),
@@ -147,8 +166,8 @@ export default function ProjetosClient({ userRole, initialEmpreendimentos, initi
   }, [router]);
 
   const dismissMfaBanner = useCallback(() => {
-    setShowMfaBanner(false);
     localStorage.setItem("mfa_banner_dismissed", new Date().toISOString());
+    notifyMfaBannerStore();
   }, []);
 
   const isAdminSistema = userRole === "admin_sistema";

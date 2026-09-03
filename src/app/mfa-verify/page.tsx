@@ -50,7 +50,7 @@ function MfaVerifyContent() {
       }
     }
     checkMethods();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   const tryWebAuthn = useCallback(async () => {

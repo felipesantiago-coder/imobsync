@@ -405,10 +405,10 @@ function AssinaturasTab({
                       ) : (
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-[10px] font-semibold">Inativo</span>
                       )}
-                      {plano.popular && (
+                      {Boolean(plano.popular) && (
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-semibold">Popular</span>
                       )}
-                      {plano.maior_economia && (
+                      {Boolean(plano.maior_economia) && (
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-semibold">Maior economia</span>
                       )}
                     </div>

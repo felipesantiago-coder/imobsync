@@ -18,7 +18,7 @@ export async function GET() {
 
     const { data, error } = await supabase
       .from('planos')
-      .select('*')
+      .select('id, nome, descricao, periodo_meses, preco, features, popular, maior_economia, ativo, ordem, mercadopago_plan_id')
       .eq('ativo', true)
       .order('ordem', { ascending: true });
 

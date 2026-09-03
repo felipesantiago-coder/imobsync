@@ -14,7 +14,7 @@ export default async function PlanosPage() {
   // Buscar planos ativos
   const { data: planosData, error } = await supabase
     .from('planos')
-    .select('*')
+    .select('id, nome, descricao, periodo_meses, preco, features, popular, maior_economia, ativo, ordem, mercadopago_plan_id')
     .eq('ativo', true)
     .order('ordem', { ascending: true });
 
@@ -24,12 +24,20 @@ export default async function PlanosPage() {
   }));
 
   // Buscar assinatura ativa do usuário
-  const { data: assinaturaAtiva } = await supabase
+  // PostgREST returns many-to-one embeds as an object; supabase-js without
+  // generated DB types infers an array, so we assert the real shape at the boundary.
+  const { data: assinaturaAtivaRaw } = await supabase
     .from('assinaturas')
     .select('id, status, plano:planos(id, nome)')
     .eq('user_id', user.id)
     .eq('status', 'active')
     .maybeSingle();
+
+  const assinaturaAtiva = assinaturaAtivaRaw as unknown as {
+    id: string;
+    status: string;
+    plano: { id: string; nome: string };
+  } | null;
 
   // Buscar perfil para nome
   const { data: profile } = await supabase

@@ -202,11 +202,15 @@ async function handlePaymentEvent(
         // Buscar usuario pelo email no auth.users
         try {
           const adminAuth = createAdminClient();
+          // ⚠︎ FINDING (performance program, Phase 0): the installed @supabase/auth-js
+          // listUsers() only sends page/per_page — the `filter` field is ignored at
+          // runtime. Behavior is preserved as-is pending owner validation with
+          // staging data; do NOT treat users[0] as guaranteed to match payerEmail.
           const { data: { users } } = await adminAuth.auth.admin.listUsers({
             page: 1,
             perPage: 1,
             filter: `email.eq.${payerEmail}`,
-          });
+          } as Parameters<typeof adminAuth.auth.admin.listUsers>[0] & { filter: string });
           if (users && users.length > 0) {
             userId = users[0].id;
             // Buscar assinatura pendente/ativa mais recente
@@ -571,8 +575,9 @@ async function findLocalSubscription(
     const { data: { users } } = await admin.auth.admin.listUsers({
       page: 1,
       perPage: 1,
+      // ⚠︎ See note in processPaymentEvent: SDK ignores `filter` at runtime.
       filter: `email.eq.${payerEmail}`,
-    });
+    } as Parameters<typeof admin.auth.admin.listUsers>[0] & { filter: string });
     if (users && users.length > 0) {
       foundUserId = users[0].id;
     }

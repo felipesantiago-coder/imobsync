@@ -15,7 +15,8 @@ export default async function PlanosPage() {
   try {
     const supabase = await createClient();
     const { data } = await supabase.auth.getUser();
-    user = data.user;
+    // GoTrue types email as string | undefined; the local contract uses null.
+    user = data.user ? { id: data.user.id, email: data.user.email ?? null } : null;
 
     if (user) {
       const { data: p } = await supabase
@@ -43,7 +44,7 @@ export default async function PlanosPage() {
     const adminClient = createAdminClient();
     const { data: planosData } = await adminClient
       .from('planos')
-      .select('*')
+      .select('id, nome, descricao, periodo_meses, preco, features, popular, maior_economia, ativo, ordem, mercadopago_plan_id')
       .eq('ativo', true)
       .order('ordem', { ascending: true });
 

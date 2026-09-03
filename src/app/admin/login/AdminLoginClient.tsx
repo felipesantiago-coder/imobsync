@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -137,9 +138,9 @@ export default function AdminLoginClient() {
           </div>
 
           <div className="text-center mt-4">
-            <a href="/" className="text-sm text-gray-500 hover:text-gray-900 transition-colors">
+            <Link href="/" className="text-sm text-gray-500 hover:text-gray-900 transition-colors">
               ← Voltar ao ImobSync
-            </a>
+            </Link>
           </div>
         </div>
       </main>

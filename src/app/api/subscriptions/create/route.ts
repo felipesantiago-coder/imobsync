@@ -38,9 +38,10 @@ export async function POST(request: NextRequest) {
     const adminClient = createAdminClient();
 
     // 1. Buscar o plano
+    // Somente as colunas consumidas abaixo (audit: trocar select(*) por campos)
     const { data: plano, error: planoErr } = await adminClient
       .from('planos')
-      .select('*')
+      .select('id, nome, preco, periodo_meses')
       .eq('id', planoId)
       .eq('ativo', true)
       .single();
@@ -82,7 +83,7 @@ export async function POST(request: NextRequest) {
       const hoje = new Date().toISOString().slice(0, 10);
       const { data: cupom } = await adminClient
         .from('cupons')
-        .select('*')
+        .select('id, codigo, ativo, tipo_desconto, valor_desconto, planos_ids, usos_maximos, usos_atuais, valido_a_partir, valido_ate')
         .eq('id', cupomId)
         .maybeSingle();
 
@@ -146,6 +147,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Erro ao criar assinatura.' }, { status: 500 });
       }
       assinaturaId = newAssinatura.id;
+    }
+
+    // Defensive guard: assinaturaId is always set by the branch above; this
+    // satisfies the createMpPreference contract without changing behavior.
+    if (!assinaturaId) {
+      return NextResponse.json({ error: 'Erro ao preparar assinatura.' }, { status: 500 });
     }
 
     // Criar Preference no MP (suporta PIX, cartão, boleto)

@@ -1,18 +1,21 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import { Suspense } from "react";
 import "./globals.css";
-import { Toaster } from "@/components/ui/toaster";
 import SubscriptionRefresher from "@/components/SubscriptionRefresher";
 
-const geistSans = Geist({
+// Versioned local fonts (audit P3.1): removes the build-time network
+// dependency on Google Fonts while keeping next/font optimization.
+const geistSans = localFont({
+  src: "../fonts/Geist-Variable.woff2",
   variable: "--font-geist-sans",
-  subsets: ["latin"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
+const geistMono = localFont({
+  src: "../fonts/GeistMono-Variable.woff2",
   variable: "--font-geist-mono",
-  subsets: ["latin"],
+  display: "swap",
 });
 
 const siteUrl =
@@ -51,8 +54,8 @@ export const metadata: Metadata = {
     images: [
       {
         url: "/imobsync-preview.webp",
-        width: 1424,
-        height: 752,
+        width: 1200,
+        height: 630,
         alt: "ImobSync",
         type: "image/webp",
       },
@@ -78,7 +81,10 @@ export default function RootLayout({
         suppressHydrationWarning
       >
         {children}
-        <Toaster />
+        {/* Global Toaster removed (audit P2.5): no consumer of use-toast or
+            sonner exists in the app — AdminSistemaClient renders its own
+            inline toasts. The ui/toaster + use-toast modules remain in the
+            repo but are no longer shipped to every page. */}
         <Suspense fallback={null}>
           <SubscriptionRefresher />
         </Suspense>

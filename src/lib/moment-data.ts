@@ -39,8 +39,11 @@ export function formatMomentCurrency(value: number): string {
   return fmtCurrency(value);
 }
 
+// Raw row shape: valorStr/valorFormatado are derived from valorVenda in momentUnits below.
+type RawMomentUnit = Omit<MomentUnit, "valorStr" | "valorFormatado">;
+
 // Static fallback data
-const rawData: MomentUnit[] = [
+const rawData: RawMomentUnit[] = [
   { andar: 1, unidade: 101, vagas: 3, area: 112.3, areaStr: '112,3 m²', valorVenda: 2240814.84, tipologia: '1 Suíte + 2 Semissuítes', status: "disponivel", quartos: 3, isCobertura: false, sol: 'Face Norte' },
   { andar: 1, unidade: 102, vagas: 2, area: 89.34, areaStr: '89,34 m²', valorVenda: 1699023.48, tipologia: '1 Suíte', status: "disponivel", quartos: 3, isCobertura: false, sol: 'Face Norte' },
   { andar: 1, unidade: 103, vagas: 2, area: 88.3, areaStr: '88,3 m²', valorVenda: 1647260.41, tipologia: '1 Suíte', status: "disponivel", quartos: 3, isCobertura: false, sol: 'Face Sul' },

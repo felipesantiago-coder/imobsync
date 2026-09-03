@@ -73,10 +73,27 @@ export async function getCoordenadorEmpreendimentos(userId: string): Promise<str
 /**
  * Verifica se um coordenador tem pelo menos um empreendimento atribuído.
  * Usado para tabelas de unidades hardcoded que não têm empreendimento_id.
+ * Existência com limit(1) (audit P1.5): mesmo resultado booleano,
+ * sem transferir a lista completa de IDs.
  */
 export async function isCoordenadorWithAnyEmpreendimento(userId: string): Promise<boolean> {
-  const assigned = await getCoordenadorEmpreendimentos(userId);
-  return assigned.length > 0;
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from('coordenador_empreendimentos')
+    .select('empreendimento_id')
+    .eq('coordenador_id', userId)
+    .limit(1);
+
+  const code = error ? (error as unknown as Record<string, unknown>)?.code : null;
+  if (code === '42P01') {
+    console.warn('[coordinator-access] Tabela coordenador_empreendimentos não existe. Acesso negado (fail-closed).');
+    return false; // tabela não existe = acesso negado (fail-closed)
+  }
+  if (error) {
+    console.error('[coordinator-access] Erro ao verificar atribuições:', error.message);
+    return false;
+  }
+  return (data?.length ?? 0) > 0;
 }
 
 /**
@@ -84,6 +101,9 @@ export async function isCoordenadorWithAnyEmpreendimento(userId: string): Promis
  * Aceita tanto slug ('villa-bianco') quanto UUID.
  * Retorna true apenas se o coordenador tem o empreendimento atribuído.
  * Design fail-closed: se a tabela não existir, retorna false.
+ * Consulta de existência pontual (audit P1.5): um lookup indexado por
+ * (coordenador_id, empreendimento_id) com limit(1), em vez de carregar
+ * todas as atribuições do coordenador.
  */
 export async function coordenadorHasAccess(
   userId: string,
@@ -92,6 +112,22 @@ export async function coordenadorHasAccess(
   const uuid = await resolveEmpreendimentoId(slugOrId);
   if (!uuid) return false;
 
-  const assigned = await getCoordenadorEmpreendimentos(userId);
-  return assigned.includes(uuid);
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from('coordenador_empreendimentos')
+    .select('empreendimento_id')
+    .eq('coordenador_id', userId)
+    .eq('empreendimento_id', uuid)
+    .limit(1);
+
+  const code = error ? (error as unknown as Record<string, unknown>)?.code : null;
+  if (code === '42P01') {
+    console.warn('[coordinator-access] Tabela coordenador_empreendimentos não existe. Acesso negado (fail-closed).');
+    return false; // tabela não existe = acesso negado (fail-closed)
+  }
+  if (error) {
+    console.error('[coordinator-access] Erro ao verificar acesso:', error.message);
+    return false;
+  }
+  return (data?.length ?? 0) > 0;
 }

@@ -757,7 +757,7 @@ export default function VillaBiancoDashboard({ isAdmin = false, isCoordinator = 
   // ─── Dashboard view tracking ───
   useEffect(() => {
     track({ event_type: "dashboard_view", resource_type: "empreendimento", metadata: { empreendimento: "villa-bianco" } });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   // Buscar dados do Supabase via API + Realtime
@@ -921,7 +921,9 @@ export default function VillaBiancoDashboard({ isAdmin = false, isCoordinator = 
 
   const handleLogout = useCallback(async () => {
     await createClient().auth.signOut();
-    router.push("/");
+    // replace: logout transition must not stay in history (audit P2.6)
+    // refresh kept: purges client Router Cache of authenticated routes
+    router.replace("/");
     router.refresh();
   }, [router]);
 

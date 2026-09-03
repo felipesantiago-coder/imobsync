@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
 
     // 2. Expirar cada assinatura com CAS
     for (const sub of expiredSubs) {
-      const auditoria = `Expirada automaticamente pelo cron em ${agoraISO}. Periodo contratado (${(sub.plano as Record<string, unknown>)?.nome || 'desconhecido'}) encerrado em ${sub.data_fim}.`;
+      const auditoria = `Expirada automaticamente pelo cron em ${agoraISO}. Periodo contratado (${(sub.plano as unknown as Record<string, unknown>)?.nome || 'desconhecido'}) encerrado em ${sub.data_fim}.`;
 
       const { count, error: updateErr } = await supabase
         .from('assinaturas')

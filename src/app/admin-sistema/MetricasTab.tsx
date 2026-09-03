@@ -446,7 +446,7 @@ export default function MetricasTab({ addToast }: MetricasTabProps) {
                               </div>
                             </td>
                             <td className="px-4 py-2.5 text-xs text-slate-600">
-                              {profiles?.display_name || profiles?.email || "-"}
+                              {String(profiles?.display_name || profiles?.email || "-")}
                             </td>
                           </tr>
                         );

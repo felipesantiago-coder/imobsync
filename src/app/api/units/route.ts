@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const results = [];
+    const results: unknown[] = [];
     for (const update of updates) {
       const { data, error } = await supabase
         .from("units")

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -211,9 +212,9 @@ export default function AdminClient() {
             </div>
             <div className="flex items-center gap-3">
               {lastSync && <span className="text-xs text-gray-400 hidden sm:block">Sync: {lastSync}</span>}
-              <a href="/" className="text-sm text-gray-500 hover:text-gray-900 transition-colors flex items-center gap-1">
+              <Link href="/" className="text-sm text-gray-500 hover:text-gray-900 transition-colors flex items-center gap-1">
                 <ArrowLeft className="w-4 h-4" /><span className="hidden sm:inline">Espelho</span>
-              </a>
+              </Link>
               <button onClick={handleLogout} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-500 hover:text-red-600 hover:bg-red-50 transition-all">
                 <LogOut className="w-4 h-4" /><span className="hidden sm:inline">Sair</span>
               </button>

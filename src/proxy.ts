@@ -8,7 +8,7 @@ import { type NextRequest, NextResponse } from "next/server";
 //   3. /api/cron/expire-subscriptions (diário)
 const ALLOWED_SUB_STATUS_VALUES = new Set(['active', 'cancelled', 'lifetime', 'none', 'pending']);
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Redirecionar rota antiga de login para a nova página inicial
@@ -130,6 +130,12 @@ export async function middleware(request: NextRequest) {
   return NextResponse.next({ request });
 }
 
+// Next.js 16 convention: proxy.ts (middleware.ts is deprecated).
+// Matcher restricted to protected + interception-needed routes (audit P3.2):
+// public routes (/, /planos, /aguardando-pagamento, /change-password,
+// /mfa-onboarding, /mfa-setup, /simulador*) and /api/* never invoke the proxy.
+// Real authorization remains server-side (subscription-guard, page-level
+// server checks, RLS) — cookie checks here are hints only.
 export const config = {
   matcher: [
     "/admin/:path*",
@@ -140,11 +146,6 @@ export const config = {
     "/moment",
     "/projetos",
     "/vitta",
-    "/mfa-setup",
-    "/change-password",
-    "/mfa-onboarding",
-    "/planos",
     "/assinatura",
-    "/aguardando-pagamento",
   ],
 };

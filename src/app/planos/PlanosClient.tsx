@@ -1,5 +1,6 @@
 'use client';
 
+import Link from "next/link";
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -129,21 +130,19 @@ export default function PlanosClient({
             </div>
             <div className="flex items-center gap-2">
               {assinaturaAtiva && (
-                <a
-                  href="/assinatura"
+                <Link href="/assinatura"
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 text-xs font-semibold transition-colors border border-emerald-500/20"
                 >
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Minha Assinatura</span>
-                </a>
+                </Link>
               )}
               {isAdmin && (
-                <a
-                  href="/admin-sistema"
+                <Link href="/admin-sistema"
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 text-xs font-semibold transition-colors border border-amber-500/20"
                 >
                   Administração
-                </a>
+                </Link>
               )}
               <button
                 onClick={handleLogout}
@@ -189,7 +188,7 @@ export default function PlanosClient({
               <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
               <p className="text-sm text-emerald-800">
                 Você possui uma assinatura <strong>{assinaturaAtiva.plano.nome}</strong> ativa.
-                {' '}<a href="/assinatura" className="underline font-semibold">Gerenciar assinatura</a>
+                {' '}<Link href="/assinatura" className="underline font-semibold">Gerenciar assinatura</Link>
               </p>
             </motion.div>
           )}
@@ -285,13 +284,12 @@ export default function PlanosClient({
                     {/* CTA */}
                     <div className="mt-6">
                       {isCurrentPlan ? (
-                        <a
-                          href="/assinatura"
+                        <Link href="/assinatura"
                           className="flex items-center justify-center gap-2 w-full h-11 rounded-xl bg-emerald-100 text-emerald-700 text-sm font-semibold hover:bg-emerald-200 transition-colors"
                         >
                           <CheckCircle2 className="w-4 h-4" />
                           Plano atual
-                        </a>
+                        </Link>
                       ) : semMpId ? (
                         <Button
                           disabled

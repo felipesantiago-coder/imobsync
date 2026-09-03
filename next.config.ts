@@ -59,9 +59,10 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  typescript: {
-    ignoreBuildErrors: true,
-  },
+  // Quality gates restored in perf/optimization-program (audit P0.1):
+  // tsc --noEmit and next build both run with full type checking.
+  // reactStrictMode stays disabled until effects/listeners are validated
+  // idempotent in staging (see audit Phase 0.2 — no staging available yet).
   reactStrictMode: false,
 };
 

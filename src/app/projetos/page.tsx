@@ -31,25 +31,13 @@ export default async function ProjetosPage() {
 
   if (!user) redirect("/");
 
-  // Buscar role do usuário via perfil
-  let userRole = "coordenador";
-  try {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .maybeSingle();
-    if (profile?.role) userRole = profile.role;
-  } catch {
-    // Tabela profiles pode não existir
-  }
-
   // Ler subscription_status do cookie (definido no login)
   const cookieStore = await cookies();
   const subCookie = cookieStore.get("subscription_status")?.value;
   const hasActivePlan = subCookie === "active" || subCookie === "lifetime";
 
-  // Buscar apenas profile + empreendimentos em paralelo
+  // Perfil único (role + mfa_enabled) e empreendimentos em paralelo.
+  // (audit P1.3: a primeira consulta de perfil era duplicada aqui — removida)
   // (MFA e assinatura já verificados no login — não precisam de query aqui)
   const [profileResult, empsResult] = await Promise.all([
     supabase
@@ -64,6 +52,7 @@ export default async function ProjetosPage() {
       .order("created_at", { ascending: true }),
   ]);
 
+  let userRole = "coordenador";
   if (!profileResult.error && profileResult.data?.role) {
     userRole = profileResult.data.role;
   }

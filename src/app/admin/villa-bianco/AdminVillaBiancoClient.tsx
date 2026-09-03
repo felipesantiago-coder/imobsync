@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -11,13 +12,15 @@ export default function AdminVillaBiancoClient() {
 
   useEffect(() => {
     createClient().auth.getUser().then(({ data: { user } }) => {
-      if (!user) router.push("/");
+      if (!user) router.replace("/");
     });
   }, [router]);
 
   const handleLogout = async () => {
     await createClient().auth.signOut();
-    router.push("/");
+    // replace: logout transition must not stay in history (audit P2.6)
+    // refresh kept: purges client Router Cache of authenticated routes
+    router.replace("/");
     router.refresh();
   };
 
@@ -43,10 +46,10 @@ export default function AdminVillaBiancoClient() {
 
         {/* Ações */}
         <div className="flex items-center gap-3">
-          <a href="/projetos" className="hidden sm:flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors">
+          <Link href="/projetos" className="hidden sm:flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
             Projetos
-          </a>
+          </Link>
           <div className="w-px h-5 bg-gray-700 hidden sm:block" />
           <button
             onClick={handleLogout}

@@ -61,7 +61,7 @@ export async function POST() {
         continue;
       }
 
-      const { err } = await supabase.from("empreendimentos").insert({
+      const { error: err } = await supabase.from("empreendimentos").insert({
         nome: proj.nome,
         slug: proj.slug,
         regiao: proj.regiao,

@@ -45,9 +45,10 @@ export async function GET(request: NextRequest) {
     const hoje = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD" para comparação correta
 
     // Buscar cupom pelo código (case-insensitive via index)
+    // Somente as colunas consumidas abaixo (audit: trocar select(*) por campos)
     const { data: cupom, error: cupomErr } = await supabase
       .from('cupons')
-      .select('*')
+      .select('id, codigo, ativo, tipo_desconto, valor_desconto, planos_ids, usos_maximos, usos_atuais, valido_a_partir, valido_ate')
       .ilike('codigo', codigo)
       .maybeSingle();
 

@@ -40,8 +40,10 @@ export async function POST() {
         }
 
         // Criar política de acesso público para leitura
-        await supabase.rpc("exec_sql", {
-          query: `
+        // Políticas podem já existir; falhas do exec_sql são ignoradas.
+        try {
+          await supabase.rpc("exec_sql", {
+            query: `
             CREATE POLICY "empreendimentos_public_select" ON storage.objects
               FOR SELECT USING (bucket_id = 'empreendimentos');
             CREATE POLICY "empreendimentos_admin_insert" ON storage.objects
@@ -51,9 +53,10 @@ export async function POST() {
             CREATE POLICY "empreendimentos_admin_delete" ON storage.objects
               FOR DELETE USING (bucket_id = 'empreendimentos');
           `
-        }).catch(() => {
+          });
+        } catch {
           // Políticas podem já existir, ignorar
-        });
+        }
 
         return NextResponse.json({ message: "Bucket 'empreendimentos' criado com sucesso.", created: true });
       }

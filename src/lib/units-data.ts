@@ -175,7 +175,8 @@ export function getUnitsByFloor(floor: number): Unit[] {
 export function getStats() {
   const totalUnits = units.length;
   const disponiveis = units.filter((u) => u.status === "disponivel").length;
-  const consultar = units.filter((u) => u.status === "consultar").length;
+  // "consultar" is not a DB status today; counter kept for API/shape compatibility (always 0).
+  const consultar = units.filter((u) => (u.status as string) === "consultar").length;
   const validPrices = units.filter((u) => u.valorVenda !== null);
   const menorPreco = validPrices.length > 0 ? Math.min(...validPrices.map((u) => u.valorVenda!)) : 0;
   const maiorPreco = validPrices.length > 0 ? Math.max(...validPrices.map((u) => u.valorVenda!)) : 0;

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useTrackEvent } from "@/hooks/useTrackEvent";
@@ -338,8 +339,8 @@ function SimulatorContent() {
     const margin = 15;
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
-    const primaryColor = [26, 58, 95];
-    const secondaryColor = [212, 175, 55];
+    const primaryColor: [number, number, number] = [26, 58, 95];
+    const secondaryColor: [number, number, number] = [212, 175, 55];
     let yPos = 0;
 
     // Header
@@ -585,8 +586,10 @@ function SimulatorContent() {
     // Mobile-safe download: cria blob e abre em nova aba como fallback
     try {
       const blob = doc.output("blob");
-      if (navigator.msSaveOrOpenBlob) {
-        navigator.msSaveOrOpenBlob(blob, fileName);
+      // IE/Edge legacy API is not part of lib.dom; keep behavior with an explicit capability check
+      const legacyNav = navigator as Navigator & { msSaveOrOpenBlob?: (blob: Blob, fileName: string) => boolean };
+      if (typeof legacyNav.msSaveOrOpenBlob === "function") {
+        legacyNav.msSaveOrOpenBlob(blob, fileName);
       } else {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
@@ -631,10 +634,10 @@ function SimulatorContent() {
                 <p className="text-xs text-slate-500 font-medium hidden sm:block">Simulador Villa Bianco</p>
               </div>
             </div>
-            <a href="/villa-bianco" className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium flex items-center gap-2">
+            <Link href="/villa-bianco" className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium flex items-center gap-2">
               <span className="hidden sm:inline">← Voltar ao Villa Bianco</span>
               <span className="sm:hidden">Voltar</span>
-            </a>
+            </Link>
           </div>
         </div>
       </header>
@@ -765,7 +768,7 @@ function SimulatorContent() {
                   {inccMode !== "none" && (
                     <div className="mt-4 pl-2 space-y-3 border-l-2 border-slate-100 ml-4">
                       <label className="flex items-center gap-3 p-2 cursor-pointer hover:bg-slate-50 rounded-lg">
-                        <input type="radio" name="incc" value="none" checked={inccMode === "none"} onChange={() => setInccMode("none")} className="w-4 h-4 text-amber-600 focus:ring-amber-500" />
+                        <input type="radio" name="incc" value="none" checked={(inccMode as InccMode) === "none"} onChange={() => setInccMode("none")} className="w-4 h-4 text-amber-600 focus:ring-amber-500" />
                         <span className="text-sm text-slate-600">Sem correção</span>
                       </label>
                       <label className="flex items-center gap-3 p-2 cursor-pointer hover:bg-slate-50 rounded-lg">

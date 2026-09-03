@@ -411,7 +411,7 @@ export default function MfaSetupPage() {
                       <div className="text-center">
                         <p className="text-sm text-gray-600 mb-4">Escaneie o QR Code no seu app autenticador</p>
                         <div className="inline-block p-3 bg-white rounded-xl border border-gray-200 shadow-sm">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          { }
                           <img src={qrDataUrl} alt="QR Code TOTP" className="w-56 h-56" />
                         </div>
                         <div className="mt-3 p-3 bg-gray-50 rounded-lg text-xs text-gray-500 font-mono break-all select-all max-w-sm mx-auto">
