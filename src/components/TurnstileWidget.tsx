@@ -12,6 +12,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
  *
  * Requer NEXT_PUBLIC_TURNSTILE_SITE_KEY no .env
  * Se não configurado, o token é sempre "bypass" (modo dev/local).
+ *
+ * ⚠︎ Ruído de console conhecido e benigno — tudo vindo do iframe do desafio
+ * em challenges.cloudflare.com (nenhuma mensagem é gerada por este app):
+ *   1. "Creating a TrustedTypePolicy named 'goog#html' violates ... trusted-types
+ *      <token> default" → extensão Google Tag Assistant (content_script_bin.js /
+ *      tag_assistant_api_bin.js) bloqueada pela CSP interna do próprio iframe.
+ *      O CSP do ImobSync não define `trusted-types` (ver next.config.ts).
+ *   2. "OTS parsing error: Size of decompressed WOFF 2.0 is less than compressed
+ *      size" → fonte WOFF2 servida pelo próprio Cloudflare dentro do iframe.
+ *   3. "No available adapters" → log interno do runner de desafio do Cloudflare.
+ * Triage completo: docs/diagnostics/login-console-errors.md
  */
 export function useTurnstile() {
   const [token, setToken] = useState<string | null>(null);
