@@ -32,6 +32,10 @@ let cache: { data: InccResult | null; timestamp: number } = {
 
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 horas
 
+// Shared in-flight promise (audit 6.3): cold-start concurrent requests
+// trigger a single pair of upstream fetches instead of one per request.
+let inFlight: Promise<InccResult> | null = null;
+
 function formatBacenDate(d: Date): string {
   const dd = String(d.getDate()).padStart(2, "0");
   const mm = String(d.getMonth() + 1).padStart(2, "0");
@@ -236,12 +240,7 @@ function getFallback(): InccResult {
 }
 
 // ─── Handler GET ───
-export async function GET() {
-  // Verificar cache
-  if (cache.data && Date.now() - cache.timestamp < CACHE_TTL_MS) {
-    return NextResponse.json(cache.data);
-  }
-
+async function fetchFresh(): Promise<InccResult> {
   // 1) Tentar INCC-M via brasilindicadores (fonte principal — dados oficiais FGV)
   let result = await fetchINCCmFromBrasilIndicadores();
 
@@ -251,12 +250,46 @@ export async function GET() {
   }
 
   // 3) Último recurso: valores estáticos verificados manualmente
-  if (!result) {
-    result = getFallback();
+  return result || getFallback();
+}
+
+function respond(data: InccResult): NextResponse {
+  // Public, non-personalized data (audit 6.3): CDN may serve and revalidate.
+  return NextResponse.json(data, {
+    headers: {
+      "Cache-Control": "public, s-maxage=21600, stale-while-revalidate=43200",
+    },
+  });
+}
+
+export async function GET() {
+  // Cache quente dentro do TTL
+  if (cache.data && Date.now() - cache.timestamp < CACHE_TTL_MS) {
+    return respond(cache.data);
   }
 
-  // Atualizar cache
-  cache = { data: result, timestamp: Date.now() };
+  // Deduplicar requests simultâneos em uma única busca upstream
+  if (!inFlight) {
+    inFlight = fetchFresh()
+      .then((result) => {
+        // Só sobrescreve o cache com dados REAIS; o fallback estático não
+        // apaga o último dado válido (usado como stale-safe abaixo).
+        if (!result.fallback) {
+          cache = { data: result, timestamp: Date.now() };
+        }
+        return result;
+      })
+      .finally(() => {
+        inFlight = null;
+      });
+  }
+  const result = await inFlight;
 
-  return NextResponse.json(result);
+  // Stale-safe (audit 6.3): fontes falharam mas existe dado real vencido —
+  // servir o dado obsoleto em vez do fallback estático.
+  if (result.fallback && cache.data && !cache.data.fallback) {
+    return respond(cache.data);
+  }
+
+  return respond(result);
 }
