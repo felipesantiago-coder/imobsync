@@ -252,10 +252,16 @@ function LoginForm() {
           <div className="w-full max-w-[400px] mx-auto px-6 sm:px-8 lg:px-10">
             {/* Logo */}
             <div className="mb-5">
+              {/* Pre-sized WebP (audit 6.1): 480px asset for a max-240px CSS
+                  box (DPR 2 crisp); replaces the 4.536px / 181KB original.
+                  Explicit dimensions reserve layout (no CLS). */}
               <img
-                src="/imobsync-logo-claro.png"
+                src="/imobsync-logo-claro-md.webp"
                 alt="ImobSync"
+                width={480}
+                height={110}
                 className="w-full max-w-[200px] sm:max-w-[240px] h-auto"
+                fetchPriority="high"
               />
             </div>
 
@@ -421,7 +427,9 @@ function LoginForm() {
                             src={slide.image}
                             alt={slide.title}
                             className="w-full h-auto block"
-                            loading="lazy"
+                            loading={idx === 0 ? "eager" : "lazy"}
+                            fetchPriority={idx === 0 ? "high" : "auto"}
+                            decoding={idx === 0 ? undefined : "async"}
                           />
                         </div>
                       </div>
@@ -445,7 +453,9 @@ function LoginForm() {
                             src={slide.image}
                             alt={slide.title}
                             className="w-full h-auto block"
-                            loading="lazy"
+                            loading={idx === 0 ? "eager" : "lazy"}
+                            fetchPriority={idx === 0 ? "high" : "auto"}
+                            decoding={idx === 0 ? undefined : "async"}
                           />
                         </div>
                         {/* Home indicator */}
