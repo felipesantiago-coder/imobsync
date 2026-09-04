@@ -629,6 +629,7 @@ const BatchActionBar = memo(function BatchActionBar({
   saving,
   closing = false,
   onAnimEnd,
+  feedback = null,
 }: {
   count: number;
   onApplyStatus: (status: "disponivel" | "reservado" | "vendido") => void;
@@ -636,12 +637,14 @@ const BatchActionBar = memo(function BatchActionBar({
   saving: boolean;
   closing?: boolean;
   onAnimEnd: (e: React.AnimationEvent) => void;
+  feedback?: { message: string; tone: "warning" | "error" } | null;
 }) {
   return (
     <div
-      className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-3 px-5 py-3 bg-gray-900 text-white rounded-2xl shadow-2xl border border-gray-700 ${closing ? "ims-bar-out" : "ims-bar-in"}`}
+      className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] flex flex-col items-center gap-1.5 px-5 py-3 bg-gray-900 text-white rounded-2xl shadow-2xl border border-gray-700 ${closing ? "ims-bar-out" : "ims-bar-in"}`}
       onAnimationEnd={(e) => { if (e.target === e.currentTarget) onAnimEnd(e); }}
     >
+      <div className="flex items-center gap-3">
       <span className="text-sm font-semibold whitespace-nowrap">
         {count} {count === 1 ? "unidade" : "unidades"} selecionada{count !== 1 ? "s" : ""}
       </span>
@@ -678,6 +681,16 @@ const BatchActionBar = memo(function BatchActionBar({
       >
         <X className="w-4 h-4" />
       </button>
+      </div>
+      {feedback && (
+        <div
+          className={`max-w-[min(92vw,26rem)] text-center text-[11px] font-medium leading-snug ${
+            feedback.tone === "error" ? "text-red-400" : "text-amber-300"
+          }`}
+        >
+          {feedback.message}
+        </div>
+      )}
     </div>
   );
 });
@@ -702,6 +715,8 @@ export default function SalesDashboard({ isAdmin = false, isCoordinator = false,
   const [selectedForBatch, setSelectedForBatch] = useState<Set<number>>(new Set());
   const [batchSaving, setBatchSaving] = useState(false);
   const [batchConfirmStatus, setBatchConfirmStatus] = useState<string | null>(null);
+  // Feedback do último apply em lote (falhas parciais permanecem selecionadas)
+  const [batchFeedback, setBatchFeedback] = useState<{ message: string; tone: "warning" | "error" } | null>(null);
 
   // Separação clara dos modos: individual = flip do card; lote = interface seletora
   const selectorActive = updateMode && batchSelectMode && isAdmin;
@@ -817,6 +832,7 @@ export default function SalesDashboard({ isAdmin = false, isCoordinator = false,
 
   // Batch selection handlers
   const handleBatchToggle = useCallback((unit: Unit) => {
+    setBatchFeedback(null);
     setSelectedForBatch((prev) => {
       const next = new Set(prev);
       if (next.has(unit.unidade)) next.delete(unit.unidade);
@@ -827,6 +843,7 @@ export default function SalesDashboard({ isAdmin = false, isCoordinator = false,
 
   // Alterna seleção de várias unidades de uma vez (andar inteiro)
   const handleBatchToggleMany = useCallback((list: Unit[]) => {
+    setBatchFeedback(null);
     setSelectedForBatch((prev) => {
       const allSelected = list.every((u) => prev.has(u.unidade));
       const next = new Set(prev);
@@ -839,11 +856,13 @@ export default function SalesDashboard({ isAdmin = false, isCoordinator = false,
   }, []);
 
   const handleBatchClear = useCallback(() => {
+    setBatchFeedback(null);
     setSelectedForBatch(new Set());
   }, []);
 
   const handleBatchStatusChange = useCallback((newStatus: "disponivel" | "reservado" | "vendido") => {
     if (batchSaving || selectedForBatch.size === 0) return;
+    setBatchFeedback(null);
     setBatchConfirmStatus(newStatus);
   }, [batchSaving, selectedForBatch]);
 
@@ -852,24 +871,52 @@ export default function SalesDashboard({ isAdmin = false, isCoordinator = false,
     const newStatus = batchConfirmStatus as "disponivel" | "reservado" | "vendido";
     setBatchConfirmStatus(null);
     setBatchSaving(true);
+    setBatchFeedback(null);
     try {
-      const updates = Array.from(selectedForBatch).map(async (unidade) => {
-        const res = await fetch("/api/units", {
-          method: "PATCH",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ unidade, status: newStatus }),
-        });
-        return { unidade, ok: res.ok };
+      if (selectedForBatch.size === 0) {
+        setSelectedForBatch(new Set());
+        return;
+      }
+      // 1 requisição no lugar de N PATCHes; resposta traz falhas por unidade
+      const res = await fetch("/api/units/batch", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: newStatus,
+          unidades: Array.from(selectedForBatch).map((unidade) => ({ unidade })),
+        }),
       });
-      const results = await Promise.all(updates);
-      const succeeded = results.filter((r) => r.ok).map((r) => r.unidade);
+      if (!res.ok) {
+        setBatchFeedback({ message: "Erro ao atualizar em lote. Tente novamente.", tone: "error" });
+        return; // seleção preservada para nova tentativa
+      }
+      const data = (await res.json()) as {
+        total: number;
+        updated: Array<{ unidade: number | string }>;
+        failed: Array<{ unidade: string; motivo: string }>;
+      };
+      const okKeys = new Set((data.updated ?? []).map((r) => String(r.unidade)));
       setUnits((prev) =>
-        prev.map((u) => (succeeded.includes(u.unidade) ? { ...u, status: newStatus } : u))
+        prev.map((u) => (okKeys.has(String(u.unidade)) ? { ...u, status: newStatus } : u))
       );
-      setSelectedForBatch(new Set());
+      // Unidades com falha permanecem selecionadas para nova tentativa
+      setSelectedForBatch((prev) => {
+        const remaining = new Set<number>();
+        for (const unidade of prev) if (!okKeys.has(String(unidade))) remaining.add(unidade);
+        return remaining;
+      });
+      const failedCount = (data.failed ?? []).length;
+      if (failedCount > 0) {
+        setBatchFeedback(
+          failedCount >= data.total
+            ? { message: "Nenhuma unidade foi atualizada. Elas continuam selecionadas.", tone: "error" }
+            : { message: `${okKeys.size} de ${data.total} atualizadas — ${failedCount} não puderam ser atualizadas e continuam selecionadas.`, tone: "warning" }
+        );
+      }
     } catch (err) {
       console.error("Erro ao atualizar em lote:", err);
+      setBatchFeedback({ message: "Erro de conexão ao atualizar em lote.", tone: "error" });
     } finally {
       setBatchSaving(false);
     }
@@ -1199,6 +1246,7 @@ export default function SalesDashboard({ isAdmin = false, isCoordinator = false,
           onApplyStatus={handleBatchStatusChange}
           onClear={handleBatchClear}
           saving={batchSaving}
+          feedback={batchFeedback}
         />
       )}
       <ConfirmDialog

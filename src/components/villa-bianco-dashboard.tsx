@@ -701,6 +701,7 @@ const BatchActionBar = memo(function BatchActionBar({
   saving,
   closing = false,
   onAnimEnd,
+  feedback = null,
 }: {
   count: number;
   onApplyStatus: (status: VillaBiancoUnit["status"]) => void;
@@ -708,12 +709,14 @@ const BatchActionBar = memo(function BatchActionBar({
   saving: boolean;
   closing?: boolean;
   onAnimEnd: (e: React.AnimationEvent) => void;
+  feedback?: { message: string; tone: "warning" | "error" } | null;
 }) {
   return (
     <div
-      className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-3 px-5 py-3 bg-gray-900 text-white rounded-2xl shadow-2xl border border-gray-700 ${closing ? "ims-bar-out" : "ims-bar-in"}`}
+      className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] flex flex-col items-center gap-1.5 px-5 py-3 bg-gray-900 text-white rounded-2xl shadow-2xl border border-gray-700 ${closing ? "ims-bar-out" : "ims-bar-in"}`}
       onAnimationEnd={(e) => { if (e.target === e.currentTarget) onAnimEnd(e); }}
     >
+      <div className="flex items-center gap-3">
       <span className="text-sm font-semibold whitespace-nowrap">
         {count} {count === 1 ? "unidade" : "unidades"} selecionada{count !== 1 ? "s" : ""}
       </span>
@@ -750,6 +753,16 @@ const BatchActionBar = memo(function BatchActionBar({
       >
         <X className="w-4 h-4" />
       </button>
+      </div>
+      {feedback && (
+        <div
+          className={`max-w-[min(92vw,26rem)] text-center text-[11px] font-medium leading-snug ${
+            feedback.tone === "error" ? "text-red-400" : "text-amber-300"
+          }`}
+        >
+          {feedback.message}
+        </div>
+      )}
     </div>
   );
 });
@@ -775,6 +788,8 @@ export default function VillaBiancoDashboard({ isAdmin = false, isCoordinator = 
   const [selectedForBatch, setSelectedForBatch] = useState<Set<string>>(new Set());
   const [batchSaving, setBatchSaving] = useState(false);
   const [batchConfirmStatus, setBatchConfirmStatus] = useState<VillaBiancoUnit["status"] | null>(null);
+  // Feedback do último apply em lote (falhas parciais permanecem selecionadas)
+  const [batchFeedback, setBatchFeedback] = useState<{ message: string; tone: "warning" | "error" } | null>(null);
 
   // Separação clara dos modos: individual = flip do card; lote = interface seletora
   const selectorActive = updateMode && batchSelectMode && isAdmin;
@@ -885,6 +900,7 @@ export default function VillaBiancoDashboard({ isAdmin = false, isCoordinator = 
 
   // Batch selection handlers
   const handleBatchToggle = useCallback((unit: VillaBiancoUnit) => {
+    setBatchFeedback(null);
     setSelectedForBatch((prev) => {
       const next = new Set(prev);
       const key = `${unit.bloco}-${unit.unidade}`;
@@ -896,6 +912,7 @@ export default function VillaBiancoDashboard({ isAdmin = false, isCoordinator = 
 
   // Alterna seleção de várias unidades de uma vez (bloco inteiro)
   const handleBatchToggleMany = useCallback((list: VillaBiancoUnit[]) => {
+    setBatchFeedback(null);
     setSelectedForBatch((prev) => {
       const allSelected = list.every((u) => prev.has(`${u.bloco}-${u.unidade}`));
       const next = new Set(prev);
@@ -909,11 +926,13 @@ export default function VillaBiancoDashboard({ isAdmin = false, isCoordinator = 
   }, []);
 
   const handleBatchClear = useCallback(() => {
+    setBatchFeedback(null);
     setSelectedForBatch(new Set());
   }, []);
 
   const handleBatchStatusChange = useCallback((newStatus: VillaBiancoUnit["status"]) => {
     if (batchSaving || selectedForBatch.size === 0) return;
+    setBatchFeedback(null);
     setBatchConfirmStatus(newStatus);
   }, [batchSaving, selectedForBatch]);
 
@@ -922,31 +941,55 @@ export default function VillaBiancoDashboard({ isAdmin = false, isCoordinator = 
     const newStatus = batchConfirmStatus;
     setBatchConfirmStatus(null);
     setBatchSaving(true);
+    setBatchFeedback(null);
     try {
-      const updates = Array.from(selectedForBatch).map(async (key) => {
-        const [blocoStr, unidadeStr] = key.split("-");
-        const bloco = blocoStr as VillaBiancoBloco;
-        const unidade = parseInt(unidadeStr);
-        const res = await fetch("/api/villa-bianco-units", {
-          method: "PATCH",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ bloco, unidade, status: newStatus }),
-        });
-        return { key, bloco, unidade, ok: res.ok };
+      if (selectedForBatch.size === 0) {
+        setSelectedForBatch(new Set());
+        return;
+      }
+      // 1 requisição no lugar de N PATCHes; resposta traz falhas por unidade
+      const res = await fetch("/api/villa-bianco-units/batch", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: newStatus,
+          unidades: Array.from(selectedForBatch).map((key) => {
+            const [blocoStr, unidadeStr] = key.split("-");
+            return { bloco: blocoStr, unidade: parseInt(unidadeStr) };
+          }),
+        }),
       });
-      const results = await Promise.all(updates);
-      const succeeded = results.filter((r) => r.ok);
+      if (!res.ok) {
+        setBatchFeedback({ message: "Erro ao atualizar em lote. Tente novamente.", tone: "error" });
+        return; // seleção preservada para nova tentativa
+      }
+      const data = (await res.json()) as {
+        total: number;
+        updated: Array<{ bloco: string; unidade: number }>;
+        failed: Array<{ unidade: string; motivo: string }>;
+      };
+      const okKeys = new Set((data.updated ?? []).map((r) => `${r.bloco}-${r.unidade}`));
       setUnits((prev) =>
-        prev.map((u) => {
-          const key = `${u.bloco}-${u.unidade}`;
-          if (succeeded.some((r) => r.key === key)) return { ...u, status: newStatus };
-          return u;
-        })
+        prev.map((u) => (okKeys.has(`${u.bloco}-${u.unidade}`) ? { ...u, status: newStatus } : u))
       );
-      setSelectedForBatch(new Set());
+      // Unidades com falha permanecem selecionadas para nova tentativa
+      setSelectedForBatch((prev) => {
+        const remaining = new Set<string>();
+        for (const key of prev) if (!okKeys.has(key)) remaining.add(key);
+        return remaining;
+      });
+      const failedCount = (data.failed ?? []).length;
+      if (failedCount > 0) {
+        setBatchFeedback(
+          failedCount >= data.total
+            ? { message: "Nenhuma unidade foi atualizada. Elas continuam selecionadas.", tone: "error" }
+            : { message: `${okKeys.size} de ${data.total} atualizadas — ${failedCount} não puderam ser atualizadas e continuam selecionadas.`, tone: "warning" }
+        );
+      }
     } catch (err) {
       console.error("Erro ao atualizar em lote:", err);
+      setBatchFeedback({ message: "Erro de conexão ao atualizar em lote.", tone: "error" });
     } finally {
       setBatchSaving(false);
     }
@@ -1281,6 +1324,7 @@ export default function VillaBiancoDashboard({ isAdmin = false, isCoordinator = 
           onApplyStatus={handleBatchStatusChange}
           onClear={handleBatchClear}
           saving={batchSaving}
+          feedback={batchFeedback}
         />
       )}
 
