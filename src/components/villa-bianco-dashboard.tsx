@@ -95,13 +95,6 @@ const allStatuses: { value: VillaBiancoUnit["status"]; label: string; dotColor: 
   { value: "vendido", label: "Vendida", dotColor: "bg-red-500" },
 ];
 
-const statusCycle: VillaBiancoUnit["status"][] = ["disponivel", "reservado", "vendido"];
-function getNextStatus(current: VillaBiancoUnit["status"]): VillaBiancoUnit["status"] {
-  const idx = statusCycle.indexOf(current);
-  if (idx === -1) return statusCycle[0];
-  return statusCycle[(idx + 1) % statusCycle.length];
-}
-
 const statusTypes = ["disponivel", "reservado", "vendido"] as const;
 
 // ─── Posição Solar ───
@@ -194,17 +187,6 @@ const UnitCard = memo(function UnitCard({
     onSelect(unit);
   };
 
-  // Badge click: only cycle status when update mode is active
-  const handleStatusClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (isAdmin && updateMode) {
-      if (saving) return;
-      const next = getNextStatus(unit.status);
-      updateStatus(next);
-      return;
-    }
-  };
-
   const handleFlipStatusSelect = async (newStatus: VillaBiancoUnit["status"]) => {
     if (saving) return;
     await updateStatus(newStatus);
@@ -260,10 +242,9 @@ const UnitCard = memo(function UnitCard({
               {unit.bloco}
             </span>
           </div>
-          <button
-            onClick={handleStatusClick}
-            className={`inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full border ${status.color} ${isAdmin && updateMode ? "cursor-pointer hover:opacity-80 ring-1 ring-offset-1 ring-gray-200 hover:ring-gray-400" : "cursor-default"}`}
-            title={isAdmin && updateMode ? "Clique para alterar o status" : undefined}
+          {/* Status badge: purely informational — never interactive; status updates only via card click (flip) */}
+          <span
+            className={`inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full border ${status.color} cursor-default`}
           >
             {saving ? (
               <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-pulse" />
@@ -271,7 +252,7 @@ const UnitCard = memo(function UnitCard({
               <span className={`w-1.5 h-1.5 rounded-full ${status.dotColor}`} />
             )}
             {status.label}
-          </button>
+          </span>
         </div>
 
         {/* Feedback visual */}

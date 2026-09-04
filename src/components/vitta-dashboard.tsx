@@ -75,13 +75,6 @@ const allStatuses: { value: VittaUnit["status"]; label: string; dotColor: string
   { value: "vendido", label: "Vendida", dotColor: "bg-red-500" },
 ];
 
-const statusCycle: VittaUnit["status"][] = ["disponivel", "reservado", "vendido"];
-function getNextStatus(current: VittaUnit["status"]): VittaUnit["status"] {
-  const idx = statusCycle.indexOf(current);
-  if (idx === -1) return statusCycle[0];
-  return statusCycle[(idx + 1) % statusCycle.length];
-}
-
 const statusTypes = ["disponivel", "reservado", "vendido"] as const;
 
 // ─── Helpers ───
@@ -146,22 +139,11 @@ const UnitCard = memo(function UnitCard({
     onSelect(unit);
   };
 
-  // Badge click: only cycle status when update mode is active
-  const handleStatusClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (isAdmin && updateMode) {
-      if (saving) return;
-      const next = getNextStatus(unit.status);
-      if (onStatusChange) onStatusChange(unit.unidade, unit.bloco, unit.andar, next);
-      setSaving(true);
-      setTimeout(() => setSaving(false), 500);
-      return;
-    }
-  };
-
   const handleFlipStatusSelect = (newStatus: VittaUnit["status"]) => {
     if (saving) return;
     if (onStatusChange) onStatusChange(unit.unidade, unit.bloco, unit.andar, newStatus);
+    setSaving(true);
+    setTimeout(() => setSaving(false), 500);
     setFlipping(false);
   };
 
@@ -207,14 +189,13 @@ const UnitCard = memo(function UnitCard({
             <span className="text-xs font-bold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">Bloco {unit.bloco}</span>
             <span className="text-xl font-bold tracking-tight text-gray-900">{unit.unidade}</span>
           </div>
-          <button
-            onClick={handleStatusClick}
-            className={`inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full border ${status.color} ${isAdmin && updateMode ? "cursor-pointer hover:opacity-80 ring-1 ring-offset-1 ring-gray-200 hover:ring-gray-400" : "cursor-default"}`}
-            title={isAdmin && updateMode ? "Clique para alterar o status" : undefined}
+          {/* Status badge: purely informational — never interactive; status updates only via card click (flip) */}
+          <span
+            className={`inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full border ${status.color} cursor-default`}
           >
             <span className={`w-1.5 h-1.5 rounded-full ${status.dotColor}`} />
             {status.label}
-          </button>
+          </span>
         </div>
 
         <div>
