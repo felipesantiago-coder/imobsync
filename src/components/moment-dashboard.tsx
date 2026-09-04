@@ -657,10 +657,12 @@ const BatchActionBar = memo(function BatchActionBar({
 });
 
 // ─── Main Dashboard ───
-export default function MomentDashboard({ isAdmin = false, isCoordinator = false, hideHeader = false }: { isAdmin?: boolean; isCoordinator?: boolean; hideHeader?: boolean }) {
+export default function MomentDashboard({ isAdmin = false, isCoordinator = false, hideHeader = false, initialUnits = null }: { isAdmin?: boolean; isCoordinator?: boolean; hideHeader?: boolean; initialUnits?: Record<string, unknown>[] | null }) {
   const router = useRouter();
   const track = useTrackEvent();
-  const [units, setUnits] = useState<MomentUnit[]>(staticUnits);
+  // Dados iniciais server-side (audit P1.4): com initialUnits a grade renderiza
+  // direto do HTML/RSC — sem flash dos dados estáticos e sem fetch no mount.
+  const [units, setUnits] = useState<MomentUnit[]>(() => (initialUnits ? initialUnits.map(mapRowToMomentUnit) : staticUnits));
   const [selectedUnit, setSelectedUnit] = useState<MomentUnit | null>(null);
   const [collapsedFloors, setCollapsedFloors] = useState<Set<number>>(new Set());
   const [filterAndar, setFilterAndar] = useState<number | "all">("all");
@@ -684,6 +686,36 @@ export default function MomentDashboard({ isAdmin = false, isCoordinator = false
   useEffect(() => {
     let supabaseChannel: ReturnType<ReturnType<typeof createClient>["channel"]> | null = null;
 
+    // Realtime isolado do fetch: com initialUnits o canal abre no mount sem nova
+    // busca; no caminho original o canal só abre após fetch bem-sucedido
+    // (semântica preservada nos dois casos).
+    const subscribe = () => {
+      const supabase = createClient();
+      supabaseChannel = supabase
+        .channel("moment-realtime")
+        .on(
+          "postgres_changes",
+          { event: "UPDATE", schema: "public", table: "moment_units" },
+          (payload) => {
+            const updated = payload.new as Record<string, unknown>;
+            setUnits((prev) =>
+              prev.map((u) => {
+                if (u.unidade !== updated.unidade) return u;
+                const newValorVenda = updated.valor_venda as number | null;
+                return {
+                  ...u,
+                  status: updated.status as MomentUnit["status"],
+                  valorVenda: newValorVenda,
+                  valorStr: newValorVenda ? newValorVenda.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "Consulte",
+                  valorFormatado: newValorVenda ? formatMomentCurrency(newValorVenda) : "Consulte o valor",
+                };
+              })
+            );
+          }
+        )
+        .subscribe();
+    };
+
     async function loadData() {
       try {
         const res = await fetch("/api/moment-units");
@@ -693,44 +725,27 @@ export default function MomentDashboard({ isAdmin = false, isCoordinator = false
 
         setUnits(mapped);
 
-        // Realtime: escutar mudanças de status e preço
-        const supabase = createClient();
-        supabaseChannel = supabase
-          .channel("moment-realtime")
-          .on(
-            "postgres_changes",
-            { event: "UPDATE", schema: "public", table: "moment_units" },
-            (payload) => {
-              const updated = payload.new as Record<string, unknown>;
-              setUnits((prev) =>
-                prev.map((u) => {
-                  if (u.unidade !== updated.unidade) return u;
-                  const newValorVenda = updated.valor_venda as number | null;
-                  return {
-                    ...u,
-                    status: updated.status as MomentUnit["status"],
-                    valorVenda: newValorVenda,
-                    valorStr: newValorVenda ? newValorVenda.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "Consulte",
-                    valorFormatado: newValorVenda ? formatMomentCurrency(newValorVenda) : "Consulte o valor",
-                  };
-                })
-              );
-            }
-          )
-          .subscribe();
+        subscribe();
       } catch {
         console.error("Erro ao carregar dados do Supabase, usando dados estáticos.");
       }
     }
 
-    loadData();
+    if (initialUnits) {
+      // Dados iniciais server-side (audit P1.4): pula o fetch no mount. A API
+      // permanece para refetch/mutações e como fallback quando o acesso foi
+      // negado no servidor (initialUnits = null → fluxo original intacto).
+      subscribe();
+    } else {
+      loadData();
+    }
 
     return () => {
       if (supabaseChannel) {
         createClient().removeChannel(supabaseChannel);
       }
     };
-  }, []);
+  }, [initialUnits]);
 
   const filteredUnits = useMemo(() => {
     let result = [...units];

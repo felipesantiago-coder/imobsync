@@ -666,10 +666,12 @@ const BatchActionBar = memo(function BatchActionBar({
 });
 
 // ─── Main Dashboard ───
-export default function SalesDashboard({ isAdmin = false, isCoordinator = false, hideHeader = false }: { isAdmin?: boolean; isCoordinator?: boolean; hideHeader?: boolean }) {
+export default function SalesDashboard({ isAdmin = false, isCoordinator = false, hideHeader = false, initialUnits = null }: { isAdmin?: boolean; isCoordinator?: boolean; hideHeader?: boolean; initialUnits?: Record<string, unknown>[] | null }) {
   const router = useRouter();
   const track = useTrackEvent();
-  const [units, setUnits] = useState<Unit[]>(staticUnits);
+  // Dados iniciais server-side (audit P1.4): com initialUnits a grade renderiza
+  // direto do HTML/RSC — sem flash dos dados estáticos e sem fetch no mount.
+  const [units, setUnits] = useState<Unit[]>(() => (initialUnits ? initialUnits.map(mapRowToUnit) : staticUnits));
   const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null);
   const [collapsedFloors, setCollapsedFloors] = useState<Set<number>>(new Set());
   const [filterQuartos, setFilterQuartos] = useState<number | "all">("all");
@@ -692,6 +694,30 @@ export default function SalesDashboard({ isAdmin = false, isCoordinator = false,
   useEffect(() => {
     let supabaseChannel: ReturnType<ReturnType<typeof createClient>["channel"]> | null = null;
 
+    // Realtime isolado do fetch: com initialUnits o canal abre no mount sem nova
+    // busca; no caminho original o canal só abre após fetch bem-sucedido
+    // (semântica preservada nos dois casos).
+    const subscribe = () => {
+      const supabase = createClient();
+      supabaseChannel = supabase
+        .channel("dashboard-realtime")
+        .on(
+          "postgres_changes",
+          { event: "UPDATE", schema: "public", table: "units" },
+          (payload) => {
+            const updated = payload.new as Record<string, unknown>;
+            setUnits((prev) =>
+              prev.map((u) =>
+                u.unidade === updated.unidade
+                  ? { ...u, status: updated.status as Unit["status"] }
+                  : u
+              )
+            );
+          }
+        )
+        .subscribe();
+    };
+
     async function loadData() {
       try {
         const res = await fetch("/api/units");
@@ -701,38 +727,27 @@ export default function SalesDashboard({ isAdmin = false, isCoordinator = false,
 
         setUnits(mapped);
 
-        // Realtime: escutar mudanças de status
-        const supabase = createClient();
-        supabaseChannel = supabase
-          .channel("dashboard-realtime")
-          .on(
-            "postgres_changes",
-            { event: "UPDATE", schema: "public", table: "units" },
-            (payload) => {
-              const updated = payload.new as Record<string, unknown>;
-              setUnits((prev) =>
-                prev.map((u) =>
-                  u.unidade === updated.unidade
-                    ? { ...u, status: updated.status as Unit["status"] }
-                    : u
-                )
-              );
-            }
-          )
-          .subscribe();
+        subscribe();
       } catch {
         console.error("Erro ao carregar dados do Supabase, usando dados estáticos.");
       }
     }
 
-    loadData();
+    if (initialUnits) {
+      // Dados iniciais server-side (audit P1.4): pula o fetch no mount. A API
+      // permanece para refetch/mutações e como fallback quando o acesso foi
+      // negado no servidor (initialUnits = null → fluxo original intacto).
+      subscribe();
+    } else {
+      loadData();
+    }
 
     return () => {
       if (supabaseChannel) {
         createClient().removeChannel(supabaseChannel);
       }
     };
-  }, []);
+  }, [initialUnits]);
 
   const filteredUnits = useMemo(() => {
     let result = [...units];

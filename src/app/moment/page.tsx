@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { canReadUnits, type InitialUnitsRow } from "@/lib/units-read-guard";
 import MomentDashboard from "@/components/moment-dashboard";
 
 export default async function MomentPage() {
@@ -18,6 +19,7 @@ export default async function MomentPage() {
     .filter((e) => e.length > 0);
   let isAdmin = adminEmails.length === 0 || adminEmails.includes(user.email?.toLowerCase() || "");
   let isCoordinator = false;
+  let profileRole: string | null = null;
 
   // Detectar role INDEPENDENTEMENTE do isAdmin por email
   // (evita que ADMIN_EMAILS vazio impeça detecção de coordenador)
@@ -27,6 +29,7 @@ export default async function MomentPage() {
       .select("role")
       .eq("id", user.id)
       .single();
+    profileRole = profile?.role ?? null;
     if (profile?.role === "admin_sistema") isAdmin = true;
     if (profile?.role === "coordenador") {
       isCoordinator = true;
@@ -37,5 +40,19 @@ export default async function MomentPage() {
     // Tabela profiles pode não existir
   }
 
-  return <MomentDashboard isAdmin={isAdmin} isCoordinator={isCoordinator} />;
+  // Dados iniciais server-side (audit P1.4): mesma autorização da API GET
+  // /api/moment-units (requireReadAccess) e a mesma query/ordenação. Se negado
+  // ou em erro, initialUnits permanece null e o cliente segue o fluxo original
+  // (fetch → API → mesmo resultado, inclusive fallback estático).
+  let initialUnits: InitialUnitsRow[] | null = null;
+  if (await canReadUnits(user, profileRole)) {
+    const { data } = await supabase
+      .from("moment_units")
+      .select("*")
+      .order("andar", { ascending: true })
+      .order("unidade", { ascending: true });
+    if (data) initialUnits = data;
+  }
+
+  return <MomentDashboard isAdmin={isAdmin} isCoordinator={isCoordinator} initialUnits={initialUnits} />;
 }

@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { LogOut } from "lucide-react";
 import VillaBiancoDashboard from "@/components/villa-bianco-dashboard";
 
-export default function AdminVillaBiancoClient() {
+export default function AdminVillaBiancoClient({ initialUnits = null }: { initialUnits?: Record<string, unknown>[] | null }) {
   const router = useRouter();
 
   useEffect(() => {
@@ -63,7 +63,7 @@ export default function AdminVillaBiancoClient() {
 
       {/* Dashboard com isAdmin=true */}
       <div className="pt-16">
-        <VillaBiancoDashboard isAdmin={true} hideHeader={true} />
+        <VillaBiancoDashboard isAdmin={true} hideHeader={true} initialUnits={initialUnits} />
       </div>
     </div>
   );

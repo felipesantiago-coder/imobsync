@@ -614,10 +614,12 @@ const BatchActionBar = memo(function BatchActionBar({
 });
 
 // ─── Main Dashboard ───
-export default function VittaDashboard({ isAdmin = false, isCoordinator = false, hideHeader = false }: { isAdmin?: boolean; isCoordinator?: boolean; hideHeader?: boolean }) {
+export default function VittaDashboard({ isAdmin = false, isCoordinator = false, hideHeader = false, initialUnits = null }: { isAdmin?: boolean; isCoordinator?: boolean; hideHeader?: boolean; initialUnits?: Record<string, unknown>[] | null }) {
   const router = useRouter();
   const track = useTrackEvent();
-  const [units, setUnits] = useState<VittaUnit[]>(staticUnits);
+  // Dados iniciais server-side (audit P1.4): com initialUnits a grade renderiza
+  // direto do HTML/RSC — sem flash dos dados estáticos e sem fetch no mount.
+  const [units, setUnits] = useState<VittaUnit[]>(() => (initialUnits ? initialUnits.map(mapRowToVittaUnit) : staticUnits));
   const [selectedUnit, setSelectedUnit] = useState<VittaUnit | null>(null);
   const [collapsedFloors, setCollapsedFloors] = useState<Set<string>>(new Set());
   const [filterBloco, setFilterBloco] = useState<string>("all");
@@ -638,6 +640,13 @@ export default function VittaDashboard({ isAdmin = false, isCoordinator = false,
 
   // Carregar unidades do banco (fallback para dados estáticos)
   useEffect(() => {
+    if (initialUnits) {
+      // Dados iniciais server-side (audit P1.4): banco já consultado na request
+      // com a mesma query/ordenação da API — sem fetch duplicado no mount.
+      // O fallback para dados estáticos da API continua intacto quando
+      // initialUnits vem null (erro/acesso negado/resultado vazio no servidor).
+      return;
+    }
     (async () => {
       try {
         const res = await fetch("/api/vitta-units");
@@ -653,7 +662,7 @@ export default function VittaDashboard({ isAdmin = false, isCoordinator = false,
         // Manter dados estáticos como fallback
       }
     })();
-  }, []);
+  }, [initialUnits]);
 
   const handleSelectUnit = useCallback((unit: VittaUnit) => setSelectedUnit(unit), []);
   const handleCloseExpanded = useCallback(() => setSelectedUnit(null), []);

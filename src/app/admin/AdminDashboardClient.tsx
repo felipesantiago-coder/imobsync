@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { LogOut } from "lucide-react";
 import SalesDashboard from "@/components/sales-dashboard";
 
-export default function AdminDashboardClient() {
+export default function AdminDashboardClient({ initialUnits = null }: { initialUnits?: Record<string, unknown>[] | null }) {
   const router = useRouter();
 
   useEffect(() => {
@@ -63,7 +63,7 @@ export default function AdminDashboardClient() {
 
       {/* Dashboard com isAdmin=true, padding-top para não sobrepor o banner */}
       <div className="pt-16">
-        <SalesDashboard isAdmin={true} hideHeader={true} />
+        <SalesDashboard isAdmin={true} hideHeader={true} initialUnits={initialUnits} />
       </div>
     </div>
   );

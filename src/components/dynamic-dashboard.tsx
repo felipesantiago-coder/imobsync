@@ -40,6 +40,8 @@ interface DynamicDashboardProps {
   isCoordinator?: boolean;
   hideHeader?: boolean;
   simuladorUrl?: string;
+  /** Linhas brutas de projeto_units pré-buscadas no servidor (audit P1.4). */
+  initialUnits?: Record<string, unknown>[] | null;
 }
 
 // ─── Color palette ───
@@ -971,11 +973,16 @@ export default function DynamicDashboard({
   isCoordinator = false,
   hideHeader = false,
   simuladorUrl,
+  initialUnits = null,
 }: DynamicDashboardProps) {
   const router = useRouter();
   const track = useTrackEvent();
-  const [units, setUnits] = useState<ProjetoUnit[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Dados iniciais server-side (audit P1.4): grade pronta no HTML/RSC inicial;
+  // sem eles, o fluxo original (skeleton → fetch → API) permanece intacto.
+  const [units, setUnits] = useState<ProjetoUnit[]>(() =>
+    initialUnits ? initialUnits.map((row) => mapProjetoUnitRow(row, empreendimentoId)) : []
+  );
+  const [loading, setLoading] = useState<boolean>(() => !initialUnits);
   const [selectedUnit, setSelectedUnit] = useState<ProjetoUnit | null>(null);
   const [updateMode, setUpdateMode] = useState(false);
   const [selectedForBatch, setSelectedForBatch] = useState<Set<string>>(new Set());
@@ -1094,6 +1101,49 @@ export default function DynamicDashboard({
       ReturnType<typeof createClient>["channel"]
     > | null = null;
 
+    // Realtime isolado do fetch: com initialUnits o canal abre no mount sem
+    // nova busca; no caminho original o canal só abre após fetch bem-sucedido
+    // (semântica preservada nos dois casos).
+    const subscribe = () => {
+      const supabase = createClient();
+      supabaseChannel = supabase
+        .channel(`projeto-${empreendimentoId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "projeto_units",
+            filter: `empreendimento_id=eq.${empreendimentoId}`,
+          },
+          (payload) => {
+            const updated = payload.new as Record<string, unknown>;
+            setUnits((prev) =>
+              prev.map((u) => {
+                if (u.id !== updated.id) return u;
+                return {
+                  ...u,
+                  status: (updated.status as string) ?? u.status,
+                  valor_venda: (updated.valor_venda as number | null) ?? u.valor_venda,
+                  andar: (updated.andar as number) ?? u.andar,
+                  unidade: String(updated.unidade ?? u.unidade),
+                  vagas: (updated.vagas as number) ?? u.vagas,
+                  area: (updated.area as number) ?? u.area,
+                  area_str: (updated.area_str as string) || u.area_str,
+                  quartos: (updated.quartos as number) ?? u.quartos,
+                  posicao_solar: (updated.posicao_solar as string) || u.posicao_solar,
+                  tipologia: (updated.tipologia as string) || u.tipologia,
+                  bloco: (updated.bloco as string) || u.bloco,
+                  is_cobertura: (updated.is_cobertura as boolean) || u.is_cobertura,
+                  is_garden: (updated.is_garden as boolean) || u.is_garden,
+                };
+              })
+            );
+          }
+        )
+        .subscribe();
+    };
+
     async function loadData() {
       try {
         setLoading(true);
@@ -1111,44 +1161,7 @@ export default function DynamicDashboard({
 
         setUnits(mapped);
 
-        // Realtime subscription
-        const supabase = createClient();
-        supabaseChannel = supabase
-          .channel(`projeto-${empreendimentoId}`)
-          .on(
-            "postgres_changes",
-            {
-              event: "UPDATE",
-              schema: "public",
-              table: "projeto_units",
-              filter: `empreendimento_id=eq.${empreendimentoId}`,
-            },
-            (payload) => {
-              const updated = payload.new as Record<string, unknown>;
-              setUnits((prev) =>
-                prev.map((u) => {
-                  if (u.id !== updated.id) return u;
-                  return {
-                    ...u,
-                    status: (updated.status as string) ?? u.status,
-                    valor_venda: (updated.valor_venda as number | null) ?? u.valor_venda,
-                    andar: (updated.andar as number) ?? u.andar,
-                    unidade: String(updated.unidade ?? u.unidade),
-                    vagas: (updated.vagas as number) ?? u.vagas,
-                    area: (updated.area as number) ?? u.area,
-                    area_str: (updated.area_str as string) || u.area_str,
-                    quartos: (updated.quartos as number) ?? u.quartos,
-                    posicao_solar: (updated.posicao_solar as string) || u.posicao_solar,
-                    tipologia: (updated.tipologia as string) || u.tipologia,
-                    bloco: (updated.bloco as string) || u.bloco,
-                    is_cobertura: (updated.is_cobertura as boolean) || u.is_cobertura,
-                    is_garden: (updated.is_garden as boolean) || u.is_garden,
-                  };
-                })
-              );
-            }
-          )
-          .subscribe();
+        subscribe();
       } catch (err) {
         console.error("Erro ao carregar dados:", err);
       } finally {
@@ -1156,14 +1169,21 @@ export default function DynamicDashboard({
       }
     }
 
-    loadData();
+    if (initialUnits) {
+      // Dados iniciais server-side (audit P1.4): pula o fetch no mount. A API
+      // permanece para refetch/mutações e como fallback quando o acesso foi
+      // negado no servidor (initialUnits = null → fluxo original intacto).
+      subscribe();
+    } else {
+      loadData();
+    }
 
     return () => {
       if (supabaseChannel) {
         createClient().removeChannel(supabaseChannel);
       }
     };
-  }, [empreendimentoId]);
+  }, [empreendimentoId, initialUnits]);
 
   // ─── Handlers ───
   const handleSelectUnit = useCallback((unit: ProjetoUnit) => {
