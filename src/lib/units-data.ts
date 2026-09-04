@@ -212,3 +212,25 @@ export function formatCompactCurrency(value: number): string {
   }
   return formatCurrency(value);
 }
+
+/**
+ * Transforma uma linha bruta do PostgREST (`select("*")` em `units`) no
+ * formato consumido pelo dashboard. Porta exata do mapeamento inline anterior
+ * (audit P1.4: reuso idêntico entre fetch da API e dados iniciais server-side).
+ */
+export function mapRowToUnit(row: Record<string, unknown>): Unit {
+  return {
+    andar: row.andar as number,
+    unidade: row.unidade as number,
+    vagas: row.vagas as number,
+    area: Number(row.area),
+    areaStr: row.area_str as string,
+    valorVenda: row.valor_venda as number | null,
+    valorStr: row.valor_venda ? Number(row.valor_venda).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "Consulte",
+    valorFormatado: row.valor_venda ? formatCurrency(Number(row.valor_venda)) : "Consulte o valor",
+    tipoArea: row.tipo_area as Unit["tipoArea"],
+    status: row.status as Unit["status"],
+    posicaoSolar: row.posicao_solar as Unit["posicaoSolar"],
+    quartos: row.quartos as 2 | 3,
+  };
+}

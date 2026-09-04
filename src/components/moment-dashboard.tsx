@@ -8,6 +8,7 @@ import {
   momentPavimentos,
   momentAndares,
   formatMomentCurrency,
+  mapRowToMomentUnit,
   type MomentUnit,
   momentUnits as staticUnits,
 } from "@/lib/moment-data";
@@ -688,21 +689,7 @@ export default function MomentDashboard({ isAdmin = false, isCoordinator = false
         const res = await fetch("/api/moment-units");
         const data = await res.json();
 
-        const mapped: MomentUnit[] = (Array.isArray(data) ? data : []).map((row: Record<string, unknown>) => ({
-          andar: row.andar as number,
-          unidade: row.unidade as number,
-          vagas: row.vagas as number,
-          area: Number(row.area),
-          areaStr: row.area_str as string,
-          valorVenda: row.valor_venda as number | null,
-          valorStr: row.valor_venda ? Number(row.valor_venda).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "Consulte",
-          valorFormatado: row.valor_venda ? formatMomentCurrency(Number(row.valor_venda)) : "Consulte o valor",
-          tipologia: row.tipologia as MomentUnit["tipologia"],
-          status: row.status as MomentUnit["status"],
-          quartos: row.quartos as number,
-          isCobertura: row.is_cobertura as boolean,
-          sol: row.posicao_solar as string,
-        }));
+        const mapped: MomentUnit[] = (Array.isArray(data) ? data : []).map(mapRowToMomentUnit);
 
         setUnits(mapped);
 

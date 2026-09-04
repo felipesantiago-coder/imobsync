@@ -3,7 +3,7 @@
 import React, { useState, useCallback, useMemo, useEffect, memo } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { floors, areaTypes, statusTypes, formatCurrency, type Unit, units as staticUnits } from "@/lib/units-data";
+import { floors, areaTypes, statusTypes, formatCurrency, mapRowToUnit, type Unit, units as staticUnits } from "@/lib/units-data";
 import { Building2, Car, Maximize2, DollarSign, ChevronUp, Filter, X, Sun, BedDouble, Calculator, Check, LogOut, Pencil, ArrowLeft, Radio } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import MobileMenu from "@/components/MobileMenu";
@@ -697,20 +697,7 @@ export default function SalesDashboard({ isAdmin = false, isCoordinator = false,
         const res = await fetch("/api/units");
         const data = await res.json();
 
-        const mapped: Unit[] = (Array.isArray(data) ? data : []).map((row: Record<string, unknown>) => ({
-          andar: row.andar as number,
-          unidade: row.unidade as number,
-          vagas: row.vagas as number,
-          area: Number(row.area),
-          areaStr: row.area_str as string,
-          valorVenda: row.valor_venda as number | null,
-          valorStr: row.valor_venda ? Number(row.valor_venda).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "Consulte",
-          valorFormatado: row.valor_venda ? formatCurrency(Number(row.valor_venda)) : "Consulte o valor",
-          tipoArea: row.tipo_area as Unit["tipoArea"],
-          status: row.status as Unit["status"],
-          posicaoSolar: row.posicao_solar as Unit["posicaoSolar"],
-          quartos: row.quartos as 2 | 3,
-        }));
+        const mapped: Unit[] = (Array.isArray(data) ? data : []).map(mapRowToUnit);
 
         setUnits(mapped);
 

@@ -365,3 +365,24 @@ export function getVittaStats() {
   const valorMax = Math.max(...vittaUnits.filter((u) => u.valorVenda > 0).map((u) => u.valorVenda));
   return { total, disponiveis, vendidos, valorMin, valorMax };
 }
+
+/**
+ * Transforma uma linha bruta do PostgREST (`select("*")` em `vitta_units`)
+ * no formato consumido pelo dashboard. Porta exata do mapeamento inline
+ * anterior (audit P1.4) — inclusive as conversões Number().
+ */
+export function mapRowToVittaUnit(row: Record<string, unknown>): VittaUnit {
+  return {
+    bloco: row.bloco as "A" | "B",
+    andar: row.andar as string,
+    andarNum: Number(row.andar_num),
+    unidade: Number(row.unidade),
+    area: Number(row.area),
+    areaStr: row.area_str as string,
+    valorVenda: Number(row.valor_venda),
+    valorStr: formatVittaCurrency(Number(row.valor_venda)),
+    valorFormatado: formatVittaCurrency(Number(row.valor_venda)),
+    status: row.status as VittaUnit["status"],
+    tipo: row.tipologia as string,
+  };
+}

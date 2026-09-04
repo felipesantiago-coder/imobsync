@@ -179,3 +179,27 @@ export function getVillaBiancoStats() {
 export function getVillaBiancoUnitsByBloco(bloco: VillaBiancoBloco) {
   return villaBiancoUnits.filter(u => u.bloco === bloco).sort((a, b) => a.andar - b.andar || a.unidade - b.unidade);
 }
+
+/**
+ * Transforma uma linha bruta do PostgREST (`select("*")` em
+ * `villa_bianco_units`) no formato consumido pelo dashboard. Porta exata do
+ * mapeamento inline anterior (audit P1.4).
+ */
+export function mapRowToVillaBiancoUnit(row: Record<string, unknown>): VillaBiancoUnit {
+  return {
+    bloco: row.bloco as VillaBiancoBloco,
+    andar: row.andar as number,
+    unidade: row.unidade as number,
+    vagas: row.vagas as number,
+    area: Number(row.area),
+    areaStr: row.area_str as string,
+    valorVenda: row.valor_venda as number | null,
+    valorStr: row.valor_venda ? Number(row.valor_venda).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "Consulte",
+    valorFormatado: row.valor_venda ? formatVBCurrency(Number(row.valor_venda)) : "Consulte o valor",
+    tipologia: row.tipologia as VillaBiancoUnit["tipologia"],
+    status: row.status as VillaBiancoUnit["status"],
+    quartos: row.quartos as 2 | 3 | 4,
+    isCobertura: row.is_cobertura as boolean,
+    isGarden: row.is_garden as boolean,
+  };
+}

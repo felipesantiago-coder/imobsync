@@ -8,6 +8,7 @@ import {
   villaBiancoPavimentos,
   villaBiancoBlocos,
   formatVBCurrency,
+  mapRowToVillaBiancoUnit,
   type VillaBiancoUnit,
   type VillaBiancoBloco,
   villaBiancoUnits as staticUnits,
@@ -769,22 +770,7 @@ export default function VillaBiancoDashboard({ isAdmin = false, isCoordinator = 
         const res = await fetch("/api/villa-bianco-units");
         const data = await res.json();
 
-        const mapped: VillaBiancoUnit[] = (Array.isArray(data) ? data : []).map((row: Record<string, unknown>) => ({
-          bloco: row.bloco as VillaBiancoBloco,
-          andar: row.andar as number,
-          unidade: row.unidade as number,
-          vagas: row.vagas as number,
-          area: Number(row.area),
-          areaStr: row.area_str as string,
-          valorVenda: row.valor_venda as number | null,
-          valorStr: row.valor_venda ? Number(row.valor_venda).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "Consulte",
-          valorFormatado: row.valor_venda ? formatVBCurrency(Number(row.valor_venda)) : "Consulte o valor",
-          tipologia: row.tipologia as VillaBiancoUnit["tipologia"],
-          status: row.status as VillaBiancoUnit["status"],
-          quartos: row.quartos as 2 | 3 | 4,
-          isCobertura: row.is_cobertura as boolean,
-          isGarden: row.is_garden as boolean,
-        }));
+        const mapped: VillaBiancoUnit[] = (Array.isArray(data) ? data : []).map(mapRowToVillaBiancoUnit);
 
         setUnits(mapped);
 

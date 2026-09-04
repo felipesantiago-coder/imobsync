@@ -123,3 +123,26 @@ export const momentUnits: MomentUnit[] = rawData.map((u) => ({
   valorStr: u.valorVenda ? u.valorVenda.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "Consulte",
   valorFormatado: u.valorVenda ? fmtCurrency(u.valorVenda) : "Consulte o valor",
 }));
+
+/**
+ * Transforma uma linha bruta do PostgREST (`select("*")` em `moment_units`)
+ * no formato consumido pelo dashboard. Porta exata do mapeamento inline
+ * anterior (audit P1.4).
+ */
+export function mapRowToMomentUnit(row: Record<string, unknown>): MomentUnit {
+  return {
+    andar: row.andar as number,
+    unidade: row.unidade as number,
+    vagas: row.vagas as number,
+    area: Number(row.area),
+    areaStr: row.area_str as string,
+    valorVenda: row.valor_venda as number | null,
+    valorStr: row.valor_venda ? Number(row.valor_venda).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "Consulte",
+    valorFormatado: row.valor_venda ? formatMomentCurrency(Number(row.valor_venda)) : "Consulte o valor",
+    tipologia: row.tipologia as MomentUnit["tipologia"],
+    status: row.status as MomentUnit["status"],
+    quartos: row.quartos as number,
+    isCobertura: row.is_cobertura as boolean,
+    sol: row.posicao_solar as string,
+  };
+}

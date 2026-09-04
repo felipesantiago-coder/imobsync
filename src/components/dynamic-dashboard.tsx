@@ -26,26 +26,12 @@ import MobileMenu from "@/components/MobileMenu";
 import { createClient } from "@/lib/supabase/client";
 import ConfirmDialog from "@/components/confirm-dialog";
 import { useTrackEvent } from "@/hooks/useTrackEvent";
+import { mapProjetoUnitRow, type ProjetoUnit } from "@/lib/projeto-units";
 
 // ─── Interfaces ───
-interface ProjetoUnit {
-  id: string;
-  empreendimento_id: string;
-  andar: number | null;
-  unidade: string;
-  vagas: number | null;
-  area: number | null;
-  area_str: string;
-  quartos: number | null;
-  valor_venda: number | null;
-  status: string;
-  posicao_solar: string;
-  tipologia: string;
-  bloco: string;
-  is_cobertura: boolean;
-  is_garden: boolean;
-  ordem: number;
-}
+// ProjetoUnit e o mapper das linhas do PostgREST vivem em @/lib/projeto-units
+// (audit P1.4: mesma transformação reutilizada pelo fetch da API e pelos
+// dados iniciais server-side; testável sem React).
 
 interface DynamicDashboardProps {
   empreendimentoId: string;
@@ -1120,24 +1106,7 @@ export default function DynamicDashboard({
         }
         const data = await res.json();
         const mapped: ProjetoUnit[] = (Array.isArray(data) ? data : []).map(
-          (row: Record<string, unknown>) => ({
-            id: row.id as string,
-            empreendimento_id: (row.empreendimento_id as string) || empreendimentoId,
-            andar: (row.andar as number) ?? null,
-            unidade: String(row.unidade ?? ""),
-            vagas: (row.vagas as number) ?? null,
-            area: (row.area as number) ?? null,
-            area_str: (row.area_str as string) || "",
-            quartos: (row.quartos as number) ?? null,
-            valor_venda: row.valor_venda as number | null,
-            status: (row.status as string) || "disponivel",
-            posicao_solar: (row.posicao_solar as string) || "",
-            tipologia: (row.tipologia as string) || "",
-            bloco: (row.bloco as string) || "",
-            is_cobertura: (row.is_cobertura as boolean) || false,
-            is_garden: (row.is_garden as boolean) || false,
-            ordem: (row.ordem as number) ?? 0,
-          })
+          (row: Record<string, unknown>) => mapProjetoUnitRow(row, empreendimentoId)
         );
 
         setUnits(mapped);

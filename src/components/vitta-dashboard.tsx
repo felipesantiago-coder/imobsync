@@ -10,6 +10,7 @@ import {
   vittaAndares,
   vittaAndarLabels,
   formatVittaCurrency,
+  mapRowToVittaUnit,
   type VittaUnit,
   vittaUnits as staticUnits,
 } from "@/lib/vitta-data";
@@ -644,19 +645,7 @@ export default function VittaDashboard({ isAdmin = false, isCoordinator = false,
           const data = await res.json();
           if (Array.isArray(data) && data.length > 0) {
             // Mapear formato do banco para o formato do dashboard
-            const mapped: VittaUnit[] = data.map((row: Record<string, unknown>) => ({
-              bloco: row.bloco as "A" | "B",
-              andar: row.andar as string,
-              andarNum: Number(row.andar_num),
-              unidade: Number(row.unidade),
-              area: Number(row.area),
-              areaStr: row.area_str as string,
-              valorVenda: Number(row.valor_venda),
-              valorStr: formatVittaCurrency(Number(row.valor_venda)),
-              valorFormatado: formatVittaCurrency(Number(row.valor_venda)),
-              status: row.status as VittaUnit["status"],
-              tipo: row.tipologia as string,
-            }));
+            const mapped: VittaUnit[] = data.map(mapRowToVittaUnit);
             setUnits(mapped);
           }
         }
