@@ -4,7 +4,7 @@ import React, { useState, useCallback, useMemo, useEffect, memo } from "react";
 import { useRouter } from "next/navigation";
 import { useCssPresence } from "@/lib/use-css-presence";
 import { floors, areaTypes, statusTypes, formatCurrency, mapRowToUnit, type Unit, units as staticUnits } from "@/lib/units-data";
-import { Building2, Car, Maximize2, DollarSign, ChevronUp, Filter, X, Sun, BedDouble, Calculator, Check, LogOut, Pencil, ArrowLeft, Radio } from "lucide-react";
+import { Building2, Car, Maximize2, DollarSign, ChevronUp, Filter, X, Sun, BedDouble, Calculator, Check, LogOut, Pencil, ArrowLeft, Radio, ListChecks } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import MobileMenu from "@/components/MobileMenu";
 import { createClient } from "@/lib/supabase/client";
@@ -64,6 +64,7 @@ const UnitCard = memo(function UnitCard({
   isAdmin,
   onStatusChange,
   updateMode = false,
+  selectorMode = false,
   isSelected = false,
   onToggleSelect,
 }: {
@@ -73,6 +74,7 @@ const UnitCard = memo(function UnitCard({
   isAdmin?: boolean;
   onStatusChange?: (unidade: number, newStatus: Unit["status"]) => void;
   updateMode?: boolean;
+  selectorMode?: boolean;
   isSelected?: boolean;
   onToggleSelect?: (unit: Unit) => void;
 }) {
@@ -143,6 +145,41 @@ const UnitCard = memo(function UnitCard({
     await updateStatus(newStatus);
     setFlipping(false);
   };
+
+  // Modo seletor (Atualização em Lote): card compacto apenas de seleção —
+  // sem flip, sem modal, sem informações completas. Clique alterna a seleção.
+  if (selectorMode && onToggleSelect) {
+    return (
+      <button
+        type="button"
+        onClick={() => onToggleSelect(unit)}
+        data-unit-selector
+        aria-pressed={isSelected}
+        className={`relative rounded-xl border-2 p-3 text-left transition-all duration-150 active:scale-[0.97] ${
+          isSelected
+            ? "border-blue-500 bg-blue-50 ring-2 ring-blue-500 shadow-md shadow-blue-100"
+            : "border-gray-200 bg-white hover:border-gray-400 hover:shadow-md"
+        }`}
+      >
+        <span
+          className={`absolute top-2 right-2 w-5 h-5 rounded-md border-2 flex items-center justify-center ${
+            isSelected ? "bg-blue-500 border-blue-600" : "bg-gray-100 border-gray-300"
+          }`}
+        >
+          {isSelected && <Check className="w-3 h-3 text-white" />}
+        </span>
+        <div className="flex items-center pr-6">
+          <span className="text-lg font-bold tracking-tight text-gray-900">{unit.unidade}</span>
+        </div>
+        <div className="mt-1.5 flex items-center gap-1.5">
+          <span className={`w-2 h-2 rounded-full ${status.dotColor}`} />
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">
+            {status.label}
+          </span>
+        </div>
+      </button>
+    );
+  }
 
   return (
     <div
@@ -464,8 +501,10 @@ const FloorSection = memo(function FloorSection({
   isAdmin,
   onStatusChange,
   updateMode = false,
+  selectorMode = false,
   selectedForBatch,
   onToggleSelect,
+  onToggleFloorSelect,
 }: {
   floor: number;
   floorUnits: Unit[];
@@ -476,15 +515,22 @@ const FloorSection = memo(function FloorSection({
   isAdmin?: boolean;
   onStatusChange?: (unidade: number, newStatus: Unit["status"]) => void;
   updateMode?: boolean;
+  selectorMode?: boolean;
   selectedForBatch?: Set<number>;
   onToggleSelect?: (unit: Unit) => void;
+  onToggleFloorSelect?: (units: Unit[]) => void;
 }) {
+  const floorAllSelected =
+    selectorMode && floorUnits.length > 0 &&
+    floorUnits.every((u) => selectedForBatch?.has(u.unidade) ?? false);
+
   return (
     <div className="space-y-4">
       {/* Floor header */}
+      <div className="flex items-stretch gap-2">
       <button
         onClick={onToggle}
-        className="w-full flex items-center justify-between p-4 rounded-xl bg-gradient-to-r bg-[#0D1B2A] text-white shadow-lg hover:shadow-xl transition-[box-shadow,transform] duration-200 group hover:scale-[1.005] active:scale-[0.995]"
+        className="flex-1 min-w-0 flex items-center justify-between p-4 rounded-xl bg-gradient-to-r bg-[#0D1B2A] text-white shadow-lg hover:shadow-xl transition-[box-shadow,transform] duration-200 group hover:scale-[1.005] active:scale-[0.995]"
       >
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center backdrop-blur-sm">
@@ -510,16 +556,35 @@ const FloorSection = memo(function FloorSection({
           <ChevronUp className={`w-5 h-5 text-white/60 transition-transform duration-300 ${isCollapsed ? "" : "rotate-180"}`} />
         </div>
       </button>
+      {selectorMode && (
+        <button
+          onClick={() => onToggleFloorSelect?.(floorUnits)}
+          className={`flex items-center gap-2 px-3 sm:px-4 rounded-xl text-white shadow-lg transition-colors duration-200 ${floorAllSelected ? "bg-blue-600" : "bg-[#0D1B2A]"}`}
+          title={floorAllSelected ? "Desmarcar todas as unidades deste andar" : "Selecionar todas as unidades deste andar"}
+        >
+          <span
+            className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+              floorAllSelected ? "bg-white border-white" : "bg-white/10 border-white/40"
+            }`}
+          >
+            {floorAllSelected && <Check className="w-3 h-3 text-blue-600" />}
+          </span>
+          <span className="text-xs font-semibold whitespace-nowrap hidden sm:inline">
+            {floorAllSelected ? "Limpar andar" : "Selecionar andar"}
+          </span>
+        </button>
+      )}
+      </div>
 
       {/* Floor units grid — collapse por CSS (grid-rows 0fr↔1fr); sem animação
           de montagem, o CLS de ~0,3–0,4 do baseline desaparece. A classe
           ims-cv permite ao browser pular andares fora da viewport. */}
       <div
         className={`ims-collapse ${isCollapsed ? "ims-collapse-closed" : "ims-collapse-open"}`}
-        style={{ "--ims-cv-h": "480px" } as React.CSSProperties}
+        style={{ "--ims-cv-h": selectorMode ? "320px" : "480px" } as React.CSSProperties}
       >
         <div className={`ims-collapse-inner ims-cv`}>
-          <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-5">
+          <div className={`grid gap-3 md:gap-4 ${selectorMode ? "grid-cols-2 sm:grid-cols-4 lg:grid-cols-6" : "grid-cols-1 sm:grid-cols-3 lg:grid-cols-4"}`}>
             {floorUnits.map((unit) => (
               <UnitCard
                 key={unit.unidade}
@@ -529,8 +594,9 @@ const FloorSection = memo(function FloorSection({
                 isAdmin={isAdmin}
                 onStatusChange={onStatusChange}
                 updateMode={updateMode}
-                isSelected={selectedForBatch?.has(unit.unidade) ?? false}
-                onToggleSelect={onToggleSelect}
+                selectorMode={selectorMode}
+                isSelected={selectorMode ? (selectedForBatch?.has(unit.unidade) ?? false) : false}
+                onToggleSelect={selectorMode ? onToggleSelect : undefined}
               />
             ))}
           </div>
@@ -631,16 +697,21 @@ export default function SalesDashboard({ isAdmin = false, isCoordinator = false,
   const [filterStatus, setFilterStatus] = useState<Unit["status"] | "all">("all");
   const [sortBy, setSortBy] = useState<"floor" | "price-asc" | "price-desc">("floor");
   const [updateMode, setUpdateMode] = useState(false);
+  // Sub-modo do modo de atualização: false = individual (flip), true = lote (seletor)
+  const [batchSelectMode, setBatchSelectMode] = useState(false);
   const [selectedForBatch, setSelectedForBatch] = useState<Set<number>>(new Set());
   const [batchSaving, setBatchSaving] = useState(false);
   const [batchConfirmStatus, setBatchConfirmStatus] = useState<string | null>(null);
+
+  // Separação clara dos modos: individual = flip do card; lote = interface seletora
+  const selectorActive = updateMode && batchSelectMode && isAdmin;
 
   // Presença CSS (substitui AnimatePresence/motion exit — audit framer→CSS):
   // mantém overlay/barra montados durante a animação de saída e desmonta no
   // animationend. Sem mudança de comportamento visível.
   const expandedPresence = useCssPresence<Unit | null>(selectedUnit, "imsOverlayOut");
   const batchBarPresence = useCssPresence<number | null>(
-    selectedForBatch.size > 0 && isAdmin ? selectedForBatch.size : null,
+    selectorActive && selectedForBatch.size > 0 && isAdmin ? selectedForBatch.size : null,
     "imsBarOut"
   );
 
@@ -741,6 +812,7 @@ export default function SalesDashboard({ isAdmin = false, isCoordinator = false,
 
   useEffect(() => {
     if (updateMode) { setSelectedUnit(null); setSelectedForBatch(new Set()); }
+    else { setBatchSelectMode(false); }
   }, [updateMode]);
 
   // Batch selection handlers
@@ -749,6 +821,19 @@ export default function SalesDashboard({ isAdmin = false, isCoordinator = false,
       const next = new Set(prev);
       if (next.has(unit.unidade)) next.delete(unit.unidade);
       else next.add(unit.unidade);
+      return next;
+    });
+  }, []);
+
+  // Alterna seleção de várias unidades de uma vez (andar inteiro)
+  const handleBatchToggleMany = useCallback((list: Unit[]) => {
+    setSelectedForBatch((prev) => {
+      const allSelected = list.every((u) => prev.has(u.unidade));
+      const next = new Set(prev);
+      for (const u of list) {
+        if (allSelected) next.delete(u.unidade);
+        else next.add(u.unidade);
+      }
       return next;
     });
   }, []);
@@ -884,15 +969,36 @@ export default function SalesDashboard({ isAdmin = false, isCoordinator = false,
 
       {/* Update mode banner */}
       {updateMode && (
-        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 flex items-center justify-center gap-2">
-          <Pencil className="w-4 h-4 text-amber-600 flex-shrink-0" />
-          <p className="text-sm font-semibold text-amber-700">
-            Modo de Atualização Ativado — Clique em qualquer unidade para selecionar o novo status
-            {isAdmin && <span className="font-normal text-amber-600"> · Shift+clique para selecionar em lote</span>}
+        <div className={`border-b px-4 py-2.5 flex flex-wrap items-center justify-center gap-2 ${selectorActive ? "bg-blue-50 border-blue-200" : "bg-amber-50 border-amber-200"}`}>
+          {selectorActive ? (
+            <ListChecks className="w-4 h-4 text-blue-600 flex-shrink-0" />
+          ) : (
+            <Pencil className="w-4 h-4 text-amber-600 flex-shrink-0" />
+          )}
+          <p className={`text-sm font-semibold ${selectorActive ? "text-blue-700" : "text-amber-700"}`}>
+            {selectorActive
+              ? "Atualização em Lote — selecione andares e unidades e aplique um status a todas de uma vez"
+              : "Modo de Atualização Ativado — Clique em qualquer unidade para selecionar o novo status"}
           </p>
+          {isAdmin && (
+            <div className="flex rounded-lg border border-gray-300 bg-white overflow-hidden text-xs font-semibold shadow-sm flex-shrink-0">
+              <button
+                onClick={() => setBatchSelectMode(false)}
+                className={`px-3 py-1.5 transition-colors ${!selectorActive ? "bg-amber-500 text-white" : "text-gray-500 hover:bg-gray-100"}`}
+              >
+                Individual
+              </button>
+              <button
+                onClick={() => setBatchSelectMode(true)}
+                className={`px-3 py-1.5 transition-colors border-l border-gray-300 ${selectorActive ? "bg-blue-600 text-white" : "text-gray-500 hover:bg-gray-100"}`}
+              >
+                Em lote
+              </button>
+            </div>
+          )}
           <button
             onClick={() => setUpdateMode(false)}
-            className="ml-2 text-xs font-medium text-amber-600 hover:text-amber-800 underline underline-offset-2 flex-shrink-0"
+            className="ml-2 text-xs font-medium text-gray-500 hover:text-gray-800 underline underline-offset-2 flex-shrink-0"
           >
             Desativar
           </button>
@@ -1005,7 +1111,7 @@ export default function SalesDashboard({ isAdmin = false, isCoordinator = false,
         <Legend />
 
         {/* Units display — floor sections or flat sorted list */}
-        {sortBy === "floor" ? (
+        {sortBy === "floor" || selectorActive ? (
           <div className="space-y-6">
             {activeFloors.map((floor) => {
               const floorUnits = filteredUnits
@@ -1023,8 +1129,10 @@ export default function SalesDashboard({ isAdmin = false, isCoordinator = false,
                   isAdmin={isAdmin}
                   onStatusChange={handleLocalStatusChange}
                   updateMode={updateMode}
+                  selectorMode={selectorActive}
                   selectedForBatch={selectedForBatch}
                   onToggleSelect={handleBatchToggle}
+                  onToggleFloorSelect={handleBatchToggleMany}
                 />
               );
             })}
@@ -1045,8 +1153,7 @@ export default function SalesDashboard({ isAdmin = false, isCoordinator = false,
                   isAdmin={isAdmin}
                   onStatusChange={handleLocalStatusChange}
                   updateMode={updateMode}
-                  isSelected={selectedForBatch.has(unit.unidade)}
-                  onToggleSelect={handleBatchToggle}
+                  isSelected={false}
                 />
               ))}
             </div>

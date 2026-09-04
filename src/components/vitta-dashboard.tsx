@@ -14,7 +14,7 @@ import {
   type VittaUnit,
   vittaUnits as staticUnits,
 } from "@/lib/vitta-data";
-import { Building2, Maximize2, DollarSign, ChevronUp, Filter, X, Check, LogOut, Calculator, BedDouble, Sun, Pencil, ArrowLeft, Radio } from "lucide-react";
+import { Building2, Maximize2, DollarSign, ChevronUp, Filter, X, Check, LogOut, Calculator, BedDouble, Sun, Pencil, ArrowLeft, Radio, ListChecks } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import MobileMenu from "@/components/MobileMenu";
 import { createClient } from "@/lib/supabase/client";
@@ -97,6 +97,7 @@ const UnitCard = memo(function UnitCard({
   isAdmin,
   onStatusChange,
   updateMode = false,
+  selectorMode = false,
   isSelected = false,
   onToggleSelect,
 }: {
@@ -106,6 +107,7 @@ const UnitCard = memo(function UnitCard({
   isAdmin?: boolean;
   onStatusChange?: (unidade: number, bloco: string, andar: string, newStatus: VittaUnit["status"]) => void;
   updateMode?: boolean;
+  selectorMode?: boolean;
   isSelected?: boolean;
   onToggleSelect?: (unit: VittaUnit) => void;
 }) {
@@ -146,6 +148,42 @@ const UnitCard = memo(function UnitCard({
     setTimeout(() => setSaving(false), 500);
     setFlipping(false);
   };
+
+  // Modo seletor (Atualização em Lote): card compacto apenas de seleção —
+  // sem flip, sem modal, sem informações completas. Clique alterna a seleção.
+  if (selectorMode && onToggleSelect) {
+    return (
+      <button
+        type="button"
+        onClick={() => onToggleSelect(unit)}
+        data-unit-selector
+        aria-pressed={isSelected}
+        className={`relative rounded-xl border-2 p-3 text-left transition-all duration-150 active:scale-[0.97] ${
+          isSelected
+            ? "border-blue-500 bg-blue-50 ring-2 ring-blue-500 shadow-md shadow-blue-100"
+            : "border-gray-200 bg-white hover:border-gray-400 hover:shadow-md"
+        }`}
+      >
+        <span
+          className={`absolute top-2 right-2 w-5 h-5 rounded-md border-2 flex items-center justify-center ${
+            isSelected ? "bg-blue-500 border-blue-600" : "bg-gray-100 border-gray-300"
+          }`}
+        >
+          {isSelected && <Check className="w-3 h-3 text-white" />}
+        </span>
+        <div className="flex items-center gap-2 pr-6">
+          <span className="text-xs font-bold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{unit.bloco}</span>
+          <span className="text-lg font-bold tracking-tight text-gray-900">{unit.unidade}</span>
+        </div>
+        <div className="mt-1.5 flex items-center gap-1.5">
+          <span className={`w-2 h-2 rounded-full ${status.dotColor}`} />
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">
+            {status.label}
+          </span>
+        </div>
+      </button>
+    );
+  }
 
   return (
     <div
@@ -408,8 +446,10 @@ const FloorSection = memo(function FloorSection({
   isAdmin,
   onStatusChange,
   updateMode = false,
+  selectorMode = false,
   selectedForBatch,
   onToggleSelect,
+  onToggleFloorSelect,
 }: {
   floor: string;
   floorUnits: VittaUnit[];
@@ -420,18 +460,48 @@ const FloorSection = memo(function FloorSection({
   isAdmin?: boolean;
   onStatusChange?: (unidade: number, bloco: string, andar: string, newStatus: VittaUnit["status"]) => void;
   updateMode?: boolean;
+  selectorMode?: boolean;
   selectedForBatch?: Set<string>;
   onToggleSelect?: (unit: VittaUnit) => void;
+  onToggleFloorSelect?: (units: VittaUnit[]) => void;
 }) {
   const tiposInFloor = [...new Set(floorUnits.map((u) => u.tipo))];
   const totalInFloor = floorUnits.length;
   const disponiveis = floorUnits.filter((u) => u.status === "disponivel").length;
 
+  // Modo seletor: sub-grupos por bloco quando o andar mistura blocos
+  const blocoGroups = selectorMode
+    ? [...new Set(floorUnits.map((u) => u.bloco))]
+    : [];
+  const floorAllSelected =
+    selectorMode && floorUnits.length > 0 &&
+    floorUnits.every((u) => selectedForBatch?.has(`${u.bloco}-${u.unidade}`) ?? false);
+
+  const renderSelectorGrid = (groupUnits: VittaUnit[]) => (
+    <div className={`grid gap-3 md:gap-4 ${selectorMode ? "grid-cols-2 sm:grid-cols-4 lg:grid-cols-6" : "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4"}`}>
+      {groupUnits.map((unit) => (
+        <UnitCard
+          key={`${unit.bloco}-${unit.unidade}`}
+          unit={unit}
+          onSelect={onSelectUnit}
+          isBackground={selectedUnit !== null && (selectedUnit.bloco !== unit.bloco || selectedUnit.unidade !== unit.unidade)}
+          isAdmin={isAdmin}
+          onStatusChange={onStatusChange}
+          updateMode={updateMode}
+          selectorMode={selectorMode}
+          isSelected={selectorMode ? (selectedForBatch?.has(`${unit.bloco}-${unit.unidade}`) ?? false) : false}
+          onToggleSelect={selectorMode ? onToggleSelect : undefined}
+        />
+      ))}
+    </div>
+  );
+
   return (
     <div className="space-y-4">
+      <div className="flex items-stretch gap-2">
       <button
         onClick={onToggle}
-        className="w-full flex items-center justify-between p-4 rounded-xl bg-gradient-to-r bg-[#0D1B2A] text-white shadow-lg hover:shadow-xl transition-[box-shadow,transform] duration-200 group hover:scale-[1.005] active:scale-[0.995]"
+        className="flex-1 min-w-0 flex items-center justify-between p-4 rounded-xl bg-gradient-to-r bg-[#0D1B2A] text-white shadow-lg hover:shadow-xl transition-[box-shadow,transform] duration-200 group hover:scale-[1.005] active:scale-[0.995]"
       >
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center backdrop-blur-sm">
@@ -458,28 +528,69 @@ const FloorSection = memo(function FloorSection({
           <ChevronUp className={`w-5 h-5 text-white/60 transition-transform duration-300 ${isCollapsed ? "" : "rotate-180"}`} />
         </div>
       </button>
+      {selectorMode && (
+        <button
+          onClick={() => onToggleFloorSelect?.(floorUnits)}
+          className={`flex items-center gap-2 px-3 sm:px-4 rounded-xl text-white shadow-lg transition-colors duration-200 ${floorAllSelected ? "bg-blue-600" : "bg-[#0D1B2A]"}`}
+          title={floorAllSelected ? "Desmarcar todas as unidades deste andar" : "Selecionar todas as unidades deste andar"}
+        >
+          <span
+            className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+              floorAllSelected ? "bg-white border-white" : "bg-white/10 border-white/40"
+            }`}
+          >
+            {floorAllSelected && <Check className="w-3 h-3 text-blue-600" />}
+          </span>
+          <span className="text-xs font-semibold whitespace-nowrap hidden sm:inline">
+            {floorAllSelected ? "Limpar andar" : "Selecionar andar"}
+          </span>
+        </button>
+      )}
+      </div>
 
       {/* Floor units grid — collapse por CSS (grid-rows 0fr↔1fr) + culling ims-cv */}
       <div
         className={`ims-collapse ${isCollapsed ? "ims-collapse-closed" : "ims-collapse-open"}`}
-        style={{ "--ims-cv-h": "500px" } as React.CSSProperties}
+        style={{ "--ims-cv-h": selectorMode ? "360px" : "500px" } as React.CSSProperties}
       >
         <div className={`ims-collapse-inner ims-cv`}>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-5">
-            {floorUnits.map((unit) => (
-              <UnitCard
-                key={`${unit.bloco}-${unit.unidade}`}
-                unit={unit}
-                onSelect={onSelectUnit}
-                isBackground={selectedUnit !== null && (selectedUnit.bloco !== unit.bloco || selectedUnit.unidade !== unit.unidade)}
-                isAdmin={isAdmin}
-                onStatusChange={onStatusChange}
-                updateMode={updateMode}
-                isSelected={selectedForBatch?.has(`${unit.bloco}-${unit.unidade}`) ?? false}
-                onToggleSelect={onToggleSelect}
-              />
-            ))}
-          </div>
+          {selectorMode && blocoGroups.length > 1 ? (
+            <div className="space-y-5">
+              {blocoGroups.map((b) => {
+                const groupUnits = floorUnits.filter((u) => u.bloco === b);
+                const blocoAllSelected = groupUnits.every((u) => selectedForBatch?.has(`${u.bloco}-${u.unidade}`) ?? false);
+                return (
+                  <div key={b} className="space-y-2">
+                    <div className="flex items-center justify-between gap-2 px-1">
+                      <span className="text-xs font-bold uppercase tracking-wider text-gray-400">
+                        Bloco {b} · {groupUnits.length}
+                      </span>
+                      <button
+                        onClick={() => onToggleFloorSelect?.(groupUnits)}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition-colors ${
+                          blocoAllSelected
+                            ? "bg-blue-600 border-blue-600 text-white"
+                            : "bg-white border-gray-300 text-gray-500 hover:border-gray-400 hover:text-gray-700"
+                        }`}
+                      >
+                        <span
+                          className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+                            blocoAllSelected ? "bg-white border-white" : "bg-gray-50 border-gray-300"
+                          }`}
+                        >
+                          {blocoAllSelected && <Check className="w-2.5 h-2.5 text-blue-600" />}
+                        </span>
+                        {blocoAllSelected ? "Limpar" : "Selecionar"}
+                      </button>
+                    </div>
+                    {renderSelectorGrid(groupUnits)}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            renderSelectorGrid(floorUnits)
+          )}
         </div>
       </div>
     </div>
@@ -581,14 +692,19 @@ export default function VittaDashboard({ isAdmin = false, isCoordinator = false,
   const [filterStatus, setFilterStatus] = useState<VittaUnit["status"] | "all">("all");
   const [sortBy, setSortBy] = useState<"andar" | "price-asc" | "price-desc">("andar");
   const [updateMode, setUpdateMode] = useState(false);
+  // Sub-modo do modo de atualização: false = individual (flip), true = lote (seletor)
+  const [batchSelectMode, setBatchSelectMode] = useState(false);
   const [selectedForBatch, setSelectedForBatch] = useState<Set<string>>(new Set());
   const [batchSaving, setBatchSaving] = useState(false);
   const [batchConfirmStatus, setBatchConfirmStatus] = useState<VittaUnit["status"] | null>(null);
 
+  // Separação clara dos modos: individual = flip do card; lote = interface seletora
+  const selectorActive = updateMode && batchSelectMode && isAdmin;
+
   // Presença CSS (substitui AnimatePresence/motion exit — audit framer→CSS)
   const expandedPresence = useCssPresence<VittaUnit | null>(selectedUnit, "imsOverlayOut");
   const batchBarPresence = useCssPresence<number | null>(
-    selectedForBatch.size > 0 && isAdmin ? selectedForBatch.size : null,
+    selectorActive && selectedForBatch.size > 0 && isAdmin ? selectedForBatch.size : null,
     "imsBarOut"
   );
 
@@ -627,7 +743,7 @@ export default function VittaDashboard({ isAdmin = false, isCoordinator = false,
   const handleSelectUnit = useCallback((unit: VittaUnit) => setSelectedUnit(unit), []);
   const handleCloseExpanded = useCallback(() => setSelectedUnit(null), []);
 
-  useEffect(() => { if (updateMode) { setSelectedUnit(null); setSelectedForBatch(new Set()); } }, [updateMode]);
+  useEffect(() => { if (updateMode) { setSelectedUnit(null); setSelectedForBatch(new Set()); } else { setBatchSelectMode(false); } }, [updateMode]);
 
   // Batch selection handlers
   const handleBatchToggle = useCallback((unit: VittaUnit) => {
@@ -636,6 +752,20 @@ export default function VittaDashboard({ isAdmin = false, isCoordinator = false,
       const key = `${unit.bloco}-${unit.unidade}`;
       if (next.has(key)) next.delete(key);
       else next.add(key);
+      return next;
+    });
+  }, []);
+
+  // Alterna seleção de várias unidades de uma vez (andar/bloco inteiro)
+  const handleBatchToggleMany = useCallback((list: VittaUnit[]) => {
+    setSelectedForBatch((prev) => {
+      const allSelected = list.every((u) => prev.has(`${u.bloco}-${u.unidade}`));
+      const next = new Set(prev);
+      for (const u of list) {
+        const key = `${u.bloco}-${u.unidade}`;
+        if (allSelected) next.delete(key);
+        else next.add(key);
+      }
       return next;
     });
   }, []);
@@ -810,10 +940,34 @@ export default function VittaDashboard({ isAdmin = false, isCoordinator = false,
         </header>
       )}
       {updateMode && (
-        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 flex items-center justify-center gap-2">
-          <Pencil className="w-4 h-4 text-amber-600 flex-shrink-0" />
-          <p className="text-sm font-semibold text-amber-700">Modo de Atualização Ativado — Clique em qualquer unidade para alterar o status{isAdmin && <span className="font-normal text-amber-600"> · Shift+clique para selecionar em lote</span>}</p>
-          <button onClick={() => setUpdateMode(false)} className="ml-2 text-xs font-medium text-amber-600 hover:text-amber-800 underline underline-offset-2 flex-shrink-0">Desativar</button>
+        <div className={`border-b px-4 py-2.5 flex flex-wrap items-center justify-center gap-2 ${selectorActive ? "bg-blue-50 border-blue-200" : "bg-amber-50 border-amber-200"}`}>
+          {selectorActive ? (
+            <ListChecks className="w-4 h-4 text-blue-600 flex-shrink-0" />
+          ) : (
+            <Pencil className="w-4 h-4 text-amber-600 flex-shrink-0" />
+          )}
+          <p className={`text-sm font-semibold ${selectorActive ? "text-blue-700" : "text-amber-700"}`}>
+            {selectorActive
+              ? "Atualização em Lote — selecione blocos/andares e unidades e aplique um status a todas de uma vez"
+              : "Modo de Atualização Ativado — Clique em qualquer unidade para alterar o status"}
+          </p>
+          {isAdmin && (
+            <div className="flex rounded-lg border border-gray-300 bg-white overflow-hidden text-xs font-semibold shadow-sm flex-shrink-0">
+              <button
+                onClick={() => setBatchSelectMode(false)}
+                className={`px-3 py-1.5 transition-colors ${!selectorActive ? "bg-amber-500 text-white" : "text-gray-500 hover:bg-gray-100"}`}
+              >
+                Individual
+              </button>
+              <button
+                onClick={() => setBatchSelectMode(true)}
+                className={`px-3 py-1.5 transition-colors border-l border-gray-300 ${selectorActive ? "bg-blue-600 text-white" : "text-gray-500 hover:bg-gray-100"}`}
+              >
+                Em lote
+              </button>
+            </div>
+          )}
+          <button onClick={() => setUpdateMode(false)} className="ml-2 text-xs font-medium text-gray-500 hover:text-gray-800 underline underline-offset-2 flex-shrink-0">Desativar</button>
         </div>)}
 
       <main className="w-full px-3 sm:px-4 md:px-6 lg:px-8 xl:px-10 py-6 space-y-6 flex-1">
@@ -883,7 +1037,7 @@ export default function VittaDashboard({ isAdmin = false, isCoordinator = false,
 
         <Legend />
 
-        {sortBy === "andar" ? (
+        {sortBy === "andar" || selectorActive ? (
           <div className="space-y-6">
             {activeFloors.map((floor) => {
               const floorUnits = filteredUnits.filter((u) => u.andar === floor).sort((a, b) => {
@@ -902,8 +1056,10 @@ export default function VittaDashboard({ isAdmin = false, isCoordinator = false,
                   isAdmin={isAdmin}
                   onStatusChange={handleLocalStatusChange}
                   updateMode={updateMode}
+                  selectorMode={selectorActive}
                   selectedForBatch={selectedForBatch}
                   onToggleSelect={handleBatchToggle}
+                  onToggleFloorSelect={handleBatchToggleMany}
                 />
               );
             })}
@@ -916,7 +1072,7 @@ export default function VittaDashboard({ isAdmin = false, isCoordinator = false,
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-5">
               {filteredUnits.map((unit) => (
-                <UnitCard key={`${unit.bloco}-${unit.unidade}`} unit={unit} onSelect={handleSelectUnit} isBackground={false} isAdmin={isAdmin} onStatusChange={handleLocalStatusChange} updateMode={updateMode} isSelected={selectedForBatch.has(`${unit.bloco}-${unit.unidade}`)} onToggleSelect={handleBatchToggle} />
+                <UnitCard key={`${unit.bloco}-${unit.unidade}`} unit={unit} onSelect={handleSelectUnit} isBackground={false} isAdmin={isAdmin} onStatusChange={handleLocalStatusChange} updateMode={updateMode} isSelected={false} />
               ))}
             </div>
           </div>
