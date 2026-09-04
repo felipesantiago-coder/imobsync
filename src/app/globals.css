@@ -173,3 +173,100 @@
   to { opacity: 0; transform: translateX(100%); }
 }
 
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Animações CSS dos dashboards — substitui framer-motion nos 5 dashboards
+   (auditoria de performance: itens adiados "framer-motion → CSS" e
+   "content-visibility").
+
+   Entradas rodam por CSS puro já no first paint (antes da hidratação).
+   O collapse/expand usa grid-template-rows 0fr↔1fr — e, diferente do framer
+   (que animava height 0→auto NA MONTAGEM de cada andar), não há animação de
+   entrada, eliminando o CLS de ~0,3–0,55 medido no baseline.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* Card (UnitCard): entrada + hover + dim "background" */
+@keyframes imsCardIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.ims-card-in { animation: imsCardIn 0.35s cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+.ims-card-hover { transition: transform 0.2s ease-out; }
+.ims-card-hover:hover { transform: translateY(-6px) scale(1.03); }
+
+/* Collapse por andar — grid-rows 0fr↔1fr. A caixa de clip interna tem
+   padding/margem negativa extra para absorver sombra e o scale do hover
+   (o framer removia overflow:hidden após animar; aqui a caixa de clip é
+   ampliada para o resultado visual ser idêntico ao estado estável atual). */
+.ims-collapse { display: grid; transition: grid-template-rows 0.3s ease-in-out; }
+.ims-collapse-open { grid-template-rows: 1fr; }
+.ims-collapse-closed { grid-template-rows: 0fr; }
+.ims-collapse-inner {
+  min-height: 0;
+  overflow: hidden;
+  padding: 16px 12px 48px;
+  margin: -16px -12px -48px;
+  transition: padding 0.3s ease-in-out, margin 0.3s ease-in-out;
+}
+.ims-collapse-closed .ims-collapse-inner { padding: 0; margin: 0; }
+
+/* Culling de andares fora da viewport (content-visibility). A altura
+   intrínseca é calibrada por dashboard via --ims-cv-h; "auto" retém a última
+   altura renderizada após o primeiro paint (estabilidade na rolagem).
+   NOTA: a classe é PERMANENTE no wrapper do grid — alternar para
+   content-visibility:hidden nos andares colapsados quebra a transição de
+   grid-template-rows (size containment muda a contribuição de altura de
+   forma descontínua). Andares colapsados dentro do viewport pagam layout,
+   mas não paint (caixa de altura 0 + overflow hidden). */
+.ims-cv { content-visibility: auto; contain-intrinsic-size: auto var(--ims-cv-h, 480px); }
+
+/* Banner de feedback de atualização dentro do card (height 0↔auto + fade) */
+.ims-feedback { display: grid; transition: grid-template-rows 0.2s ease, opacity 0.2s ease; }
+.ims-feedback-open { grid-template-rows: 1fr; opacity: 1; }
+.ims-feedback-closed { grid-template-rows: 0fr; opacity: 0; }
+.ims-feedback-inner { min-height: 0; overflow: hidden; }
+
+/* Modal do card expandido (ExpandedCard): overlay fade + card y24→0 */
+@keyframes imsModalCardIn {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes imsModalCardOut {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(16px); }
+}
+/* Keyframes de saída com nome PRÓPRIO (não reutilizar fadeIn com "reverse"):
+   o useCssPresence identifica o fim da saída por event.animationName — o nome
+   precisa bater com o passado na chamada do hook. */
+@keyframes imsOverlayOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+.ims-overlay-in { animation: fadeIn 0.15s ease-out backwards; }
+.ims-overlay-out { animation: imsOverlayOut 0.15s ease-in forwards; }
+.ims-modal-card-in { animation: imsModalCardIn 0.2s ease-out backwards; }
+.ims-modal-card-out { animation: imsModalCardOut 0.2s ease-in forwards; }
+
+/* Barra de ação em lote (fixed, centralizada com -translate-x-1/2) */
+@keyframes imsBarIn {
+  from { opacity: 0; transform: translate(-50%, 80px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+@keyframes imsBarOut {
+  from { opacity: 1; transform: translate(-50%, 0); }
+  to { opacity: 0; transform: translate(-50%, 80px); }
+}
+.ims-bar-in { animation: imsBarIn 0.35s cubic-bezier(0.34, 1.3, 0.64, 1) backwards; }
+.ims-bar-out { animation: imsBarOut 0.25s ease-in forwards; }
+
+/* Fade de reordenação (vitta, key={sortBy}) e estado vazio */
+.ims-fade-in { animation: fadeIn 0.3s ease-out backwards; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ims-card-in, .ims-overlay-in, .ims-modal-card-in, .ims-bar-in, .ims-fade-in {
+    animation-duration: 0.01ms;
+  }
+  .ims-overlay-out, .ims-modal-card-out, .ims-bar-out { animation-duration: 0.01ms; }
+  .ims-card-hover { transition: none; }
+  .ims-collapse, .ims-collapse-inner, .ims-feedback { transition: none; }
+}

@@ -2,7 +2,7 @@
 
 import React, { memo, useState, useCallback, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+import { useCssPresence } from "@/lib/use-css-presence";
 import {
   momentTipologias,
   momentPavimentos,
@@ -158,25 +158,18 @@ const UnitCard = memo(function UnitCard({
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{
-        opacity: isBackground ? 0.25 : 1,
-        y: 0,
-      }}
-      exit={{ opacity: 0, y: -20 }}
-      transition={{
-        opacity: { duration: 0.3 },
-      }}
-      whileHover={!isBackground && !updateMode ? { y: -6, scale: 1.03 } : {}}
+    <div
       onClick={handleCardClick}
       data-unit-card
       className={`
+        ims-card-in
         relative cursor-pointer rounded-xl border-2 overflow-visible
         bg-white shadow-md hover:shadow-xl
         border-gray-100
+        transition-[transform,opacity,box-shadow] duration-300
+        ${!isBackground && !updateMode ? "ims-card-hover" : ""}
         ${isSelected ? "ring-2 ring-blue-500 border-blue-400 shadow-blue-100" : ""}
-        ${isBackground ? "pointer-events-none" : ""}
+        ${isBackground ? "opacity-25 pointer-events-none" : ""}
       `}
       style={{
         borderColor: isSelected ? undefined : "rgb(243 244 246)",
@@ -225,27 +218,24 @@ const UnitCard = memo(function UnitCard({
         </div>
 
         {/* Feedback visual */}
-        <AnimatePresence>
-          {feedback && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              className={`flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1 rounded-lg ${
+        <div className={`ims-feedback ${feedback ? "ims-feedback-open" : "ims-feedback-closed"}`}>
+          <div className="ims-feedback-inner">
+            {feedback && (
+              <div className={`flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1 rounded-lg ${
                 feedback === "success"
                   ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
                   : "bg-red-50 text-red-700 border border-red-200"
-              }`}
-            >
-              {feedback === "success" ? (
-                <Check className="w-3 h-3 flex-shrink-0" />
-              ) : (
-                <X className="w-3 h-3 flex-shrink-0" />
-              )}
-              {feedback === "success" ? "Status atualizado!" : "Erro ao atualizar. Verifique o console."}
-            </motion.div>
-          )}
-        </AnimatePresence>
+              }`}>
+                {feedback === "success" ? (
+                  <Check className="w-3 h-3 flex-shrink-0" />
+                ) : (
+                  <X className="w-3 h-3 flex-shrink-0" />
+                )}
+                {feedback === "success" ? "Status atualizado!" : "Erro ao atualizar. Verifique o console."}
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* Tipologia badge */}
         <div>
@@ -338,42 +328,28 @@ const UnitCard = memo(function UnitCard({
           </div>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 });
 
 // ─── Expanded Centered Card ───
-const ExpandedCard = memo(function ExpandedCard({ unit, onClose }: { unit: MomentUnit; onClose: () => void }) {
+const ExpandedCard = memo(function ExpandedCard({ unit, onClose, closing = false, onAnimEnd }: { unit: MomentUnit; onClose: () => void; closing?: boolean; onAnimEnd: (e: React.AnimationEvent) => void }) {
   const colors = typeColors[unit.tipologia];
   const status = statusLabels[unit.status];
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.15 }}
-      className="fixed inset-0 z-[300] flex items-center justify-center p-4 sm:p-8"
+    <div
+      className={`fixed inset-0 z-[300] flex items-center justify-center p-4 sm:p-8 ${closing ? "ims-overlay-out" : "ims-overlay-in"}`}
       onClick={onClose}
+      onAnimationEnd={(e) => { if (e.target === e.currentTarget) onAnimEnd(e); }}
     >
       {/* Backdrop */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.15 }}
-        className="absolute inset-0 bg-black/50"
-      />
+      <div className="absolute inset-0 bg-black/50" />
 
       {/* Card */}
-      <motion.div
-        initial={{ opacity: 0, y: 24 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: 16 }}
-        transition={{ duration: 0.2, ease: "easeOut" }}
-        style={{ willChange: "transform, opacity" }}
+      <div
+        className={`relative z-10 w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden ${closing ? "ims-modal-card-out" : "ims-modal-card-in"}`}
         onClick={(e) => e.stopPropagation()}
-        className="relative z-10 w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden"
       >
         {/* Top gradient bar */}
         <div className={`h-2 bg-gradient-to-r ${colors.gradient}`} />
@@ -498,8 +474,8 @@ const ExpandedCard = memo(function ExpandedCard({ unit, onClose }: { unit: Momen
             Simular Financiamento
           </a>
         </div>
-      </motion.div>
-    </motion.div>
+      </div>
+    </div>
   );
 });
 
@@ -535,13 +511,11 @@ const FloorSection = memo(function FloorSection({
   const floorLabel = momentPavimentos[floor] || `${floor}º andar`;
 
   return (
-    <motion.div layout className="space-y-4">
+    <div className="space-y-4">
       {/* Floor header */}
-      <motion.button
+      <button
         onClick={onToggle}
-        className="w-full flex items-center justify-between p-4 rounded-xl bg-gradient-to-r bg-[#0D1B2A] text-white shadow-lg hover:shadow-xl transition-shadow group"
-        whileHover={{ scale: 1.005 }}
-        whileTap={{ scale: 0.995 }}
+        className="w-full flex items-center justify-between p-4 rounded-xl bg-gradient-to-r bg-[#0D1B2A] text-white shadow-lg hover:shadow-xl transition-[box-shadow,transform] duration-200 group hover:scale-[1.005] active:scale-[0.995]"
       >
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center">
@@ -565,41 +539,34 @@ const FloorSection = memo(function FloorSection({
               );
             })}
           </div>
-          <motion.div animate={{ rotate: isCollapsed ? 0 : 180 }}>
-            <ChevronUp className="w-5 h-5 text-white/60" />
-          </motion.div>
+          <ChevronUp className={`w-5 h-5 text-white/60 transition-transform duration-300 ${isCollapsed ? "" : "rotate-180"}`} />
         </div>
-      </motion.button>
+      </button>
 
-      {/* Floor units grid */}
-      <AnimatePresence>
-        {!isCollapsed && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3, ease: "easeInOut" }}
-            className="overflow-visible"
-          >
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-5">
-              {floorUnits.map((unit) => (
-                <UnitCard
-                  key={unit.unidade}
-                  unit={unit}
-                  onSelect={onSelectUnit}
-                  isBackground={selectedUnit !== null && selectedUnit.unidade !== unit.unidade}
-                  isAdmin={isAdmin}
-                  onStatusChange={onStatusChange}
-                  updateMode={updateMode}
-                  isSelected={selectedForBatch?.has(unit.unidade) ?? false}
-                  onToggleSelect={onToggleSelect}
-                />
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
+      {/* Floor units grid — collapse por CSS (grid-rows 0fr↔1fr) + culling ims-cv */}
+      <div
+        className={`ims-collapse ${isCollapsed ? "ims-collapse-closed" : "ims-collapse-open"}`}
+        style={{ "--ims-cv-h": "560px" } as React.CSSProperties}
+      >
+        <div className={`ims-collapse-inner ims-cv`}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-5">
+            {floorUnits.map((unit) => (
+              <UnitCard
+                key={unit.unidade}
+                unit={unit}
+                onSelect={onSelectUnit}
+                isBackground={selectedUnit !== null && selectedUnit.unidade !== unit.unidade}
+                isAdmin={isAdmin}
+                onStatusChange={onStatusChange}
+                updateMode={updateMode}
+                isSelected={selectedForBatch?.has(unit.unidade) ?? false}
+                onToggleSelect={onToggleSelect}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 });
 
@@ -628,19 +595,20 @@ const BatchActionBar = memo(function BatchActionBar({
   onApplyStatus,
   onClear,
   saving,
+  closing = false,
+  onAnimEnd,
 }: {
   count: number;
   onApplyStatus: (status: "disponivel" | "reservado" | "vendido") => void;
   onClear: () => void;
   saving: boolean;
+  closing?: boolean;
+  onAnimEnd: (e: React.AnimationEvent) => void;
 }) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 80 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 80 }}
-      transition={{ type: "spring", stiffness: 400, damping: 30 }}
-      className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-3 px-5 py-3 bg-gray-900 text-white rounded-2xl shadow-2xl border border-gray-700"
+    <div
+      className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-3 px-5 py-3 bg-gray-900 text-white rounded-2xl shadow-2xl border border-gray-700 ${closing ? "ims-bar-out" : "ims-bar-in"}`}
+      onAnimationEnd={(e) => { if (e.target === e.currentTarget) onAnimEnd(e); }}
     >
       <span className="text-sm font-semibold whitespace-nowrap">
         {count} {count === 1 ? "unidade" : "unidades"} selecionada{count !== 1 ? "s" : ""}
@@ -652,7 +620,7 @@ const BatchActionBar = memo(function BatchActionBar({
         <button onClick={() => onApplyStatus("vendido")} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-600 hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"><span className="w-2 h-2 rounded-full bg-white" />Vendida</button>
       </div>
       <button onClick={onClear} className="ml-1 px-2 py-1.5 rounded-lg text-xs font-medium text-gray-400 hover:text-white hover:bg-white/10 transition-colors"><X className="w-4 h-4" /></button>
-    </motion.div>
+    </div>
   );
 });
 
@@ -675,6 +643,13 @@ export default function MomentDashboard({ isAdmin = false, isCoordinator = false
   const [selectedForBatch, setSelectedForBatch] = useState<Set<number>>(new Set());
   const [batchSaving, setBatchSaving] = useState(false);
   const [batchConfirmStatus, setBatchConfirmStatus] = useState<"disponivel" | "reservado" | "vendido" | null>(null);
+
+  // Presença CSS (substitui AnimatePresence/motion exit — audit framer→CSS)
+  const expandedPresence = useCssPresence<MomentUnit | null>(selectedUnit, "imsOverlayOut");
+  const batchBarPresence = useCssPresence<number | null>(
+    selectedForBatch.size > 0 && isAdmin ? selectedForBatch.size : null,
+    "imsBarOut"
+  );
 
   // ─── Dashboard view tracking ───
   useEffect(() => {
@@ -1043,13 +1018,7 @@ export default function MomentDashboard({ isAdmin = false, isCoordinator = false
             })}
           </div>
         ) : (
-          <motion.div
-            key={sortBy}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.3 }}
-            className="space-y-4"
-          >
+          <div className={`ims-fade-in space-y-4`} key={sortBy}>
             <div className="flex items-center gap-2 text-sm font-medium text-gray-500">
               <DollarSign className="w-4 h-4" />
               Ordenado por {sortBy === "price-asc" ? "menor preço" : "maior preço"}
@@ -1069,22 +1038,18 @@ export default function MomentDashboard({ isAdmin = false, isCoordinator = false
                 />
               ))}
             </div>
-          </motion.div>
+          </div>
         )}
 
         {/* Empty state */}
         {filteredUnits.length === 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex flex-col items-center justify-center py-16 px-4"
-          >
+          <div className="ims-fade-in flex flex-col items-center justify-center py-16 px-4">
             <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
               <Building2 className="w-8 h-8 text-gray-300" />
             </div>
             <h3 className="text-lg font-semibold text-gray-500 mb-1">Nenhuma unidade encontrada</h3>
             <p className="text-sm text-gray-400 text-center max-w-sm">Tente ajustar os filtros para visualizar mais unidades disponíveis.</p>
-          </motion.div>
+          </div>
         )}
       </main>
 
@@ -1096,19 +1061,27 @@ export default function MomentDashboard({ isAdmin = false, isCoordinator = false
         </div>
       </footer>
 
-      {/* Expanded card modal */}
-      <AnimatePresence>
-        {selectedUnit && (
-          <ExpandedCard unit={selectedUnit} onClose={handleCloseExpanded} />
-        )}
-      </AnimatePresence>
+      {/* Expanded card modal — presença CSS */}
+      {expandedPresence.mounted && (
+        <ExpandedCard
+          unit={expandedPresence.current!}
+          closing={expandedPresence.closing}
+          onAnimEnd={expandedPresence.onAnimEnd}
+          onClose={handleCloseExpanded}
+        />
+      )}
 
-      {/* Batch action bar */}
-      <AnimatePresence>
-        {selectedForBatch.size > 0 && isAdmin && (
-          <BatchActionBar count={selectedForBatch.size} onApplyStatus={handleBatchStatusChange} onClear={handleBatchClear} saving={batchSaving} />
-        )}
-      </AnimatePresence>
+      {/* Batch action bar — presença CSS */}
+      {batchBarPresence.mounted && (
+        <BatchActionBar
+          count={batchBarPresence.current!}
+          closing={batchBarPresence.closing}
+          onAnimEnd={batchBarPresence.onAnimEnd}
+          onApplyStatus={handleBatchStatusChange}
+          onClear={handleBatchClear}
+          saving={batchSaving}
+        />
+      )}
 
       <ConfirmDialog
         open={!!batchConfirmStatus}

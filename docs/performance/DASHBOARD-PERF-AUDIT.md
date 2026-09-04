@@ -40,12 +40,47 @@ Nas rotas `/empreendimento/[id]` as consultas do servidor eram 100% sequenciais;
 - Dados críticos agora chegam **no HTML/stream inicial** (critério de aceite P1.4). Estimativa conservadora: 2–5 estágios de rede a menos e primeira pintura útil da grade ocorrendo com o próprio HTML.
 - **Medição** (Lighthouse/Profiler/p50-p95) continua bloqueada pela ausência de staging — nenhuma métrica foi inventada; a contagem de estágios acima é derivada do código.
 
+### 2.4 framer-motion → CSS nos dashboards + content-visibility (aplicado em 05/09/2026)
+
+Os dois itens adiados da seção 3 foram **aplicados após validação por harness de fixtures**
+(`docs/performance/HARNESS-VISUAL-VALIDATION.md`):
+
+- **Migração CSS (5 dashboards):** cards (`ims-card-in` + hover), collapse de andar/bloco
+  (grid-rows `0fr↔1fr`, sem animação de montagem), chevron, banner de feedback, modal do card
+  expandido e barra de lote agora usam CSS puro; saídas de overlay usam o hook
+  `src/lib/use-css-presence.ts` (desmonta no `animationend` da saída).
+  `prefers-reduced-motion` respeitado (novidade — o framer não tratava).
+  Entradas passam a rodar no first paint, antes da hidratação.
+- **content-visibility: auto** no wrapper de grid de cada andar/bloco, com
+  `contain-intrinsic-size: auto var(--ims-cv-h)` calibrado por dashboard (480–620px).
+  Andares fora da viewport são pulados pelo browser.
+- **Resultados medidos no harness (10 andares × 8 unidades; estresse 30×10):**
+
+| Métrica | Antes | Depois |
+|---|---|---|
+| CLS `/empreendimento/[id]` | 0,54–0,56 | **0,00** |
+| CLS `/espelho` | 0,30–0,33 | **0,001** |
+| CLS `/moment` | 0,31–0,37 | **0,00** |
+| CLS `/vitta` | 0,34–0,41 | **0,00–0,002** |
+| CLS `/villa-bianco` | 0,013 | **0,00** |
+| JS transferido por rota de dashboard | ~313 KB | **~274 KB (−38,7 KB, −12,4%)** |
+
+- Causa-raiz do CLS eliminado: o framer animava `height: 0 → auto` na MONTAGEM de cada
+  andar, empurrando a página (shifts de 0,2–0,4 aos ~400ms). O collapse CSS não tem
+  animação de montagem — transição apenas em interação do usuário (excluída do CLS por
+  `hadRecentInput`).
+- Nenhuma API, consulta, autorização ou política de segurança alterada. `framer-motion`
+  permanece no projeto para `/planos` e `/simulador-generico` (fora do escopo).
+
 ## 3. Otimizações avaliadas e NÃO aplicadas (com justificativa)
+
+> Atualização 05/09/2026: os dois primeiros itens abaixo foram **aplicados** após
+> validação por harness (seção 2.4). Permanecem adiados:
 
 | Otimização | Motivo do adiamento |
 |---|---|
-| `framer-motion` → CSS nos cards (−38 KB gzip) | Altera feedback visual; auditoria exige comparação visual/`prefers-reduced-motion` validados — sem staging é regressão de percepção. |
-| `content-visibility: auto` na grade | Risco de CLS/layout shift sem `contain-intrinsic-size` calibrado por card; exige validação visual. |
+| ~~`framer-motion` → CSS nos cards (−38 KB gzip)~~ **APLICADO (2.4)** | — |
+| ~~`content-visibility: auto` na grade~~ **APLICADO (2.4)** | — |
 | Bulk update RPC transacional (P0.2 — lote de N PATCHes) | Exige migration no banco + validação de atomicidade/Realtime em staging. Não afeta o tempo de *carregamento* das páginas (escopo desta auditoria). |
 | Reduzir `.select("*")` das tabelas de unidades | Dashboards consomem a linha inteira; redução exige auditoria consumidor-a-consumidor (pendência já documentada na rodada anterior). |
 | Contexto de autorização tipado por request dentro do guard | Toca `subscription-guard.ts` (código crítico de pagamentos) sem staging; o guard foi mantido caixa-preta. |
