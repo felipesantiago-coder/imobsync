@@ -8,7 +8,6 @@ import {
   Building2,
   Calculator,
   Info,
-  AlertTriangle,
   FileDown,
   Trash2,
   RotateCcw,
@@ -108,7 +107,6 @@ interface CalculationResult {
   monthlyRows: InstallmentRow[];
   semesterRows: InstallmentRow[];
   unicaScheduleRows: InstallmentRow[];
-  isLowCaptation: boolean;
   inccMonthlyRate: number;
   inccCorrectionFactor: number;
   inccAccumulatedPercent: number;
@@ -286,7 +284,6 @@ function SimulatorContent() {
       monthlyRows,
       semesterRows,
       unicaScheduleRows,
-      isLowCaptation: captPct > 0 && captPct < MIN_CAPTATION_PCT,
       inccMonthlyRate,
       inccCorrectionFactor,
       inccAccumulatedPercent,
@@ -788,13 +785,6 @@ function SimulatorContent() {
                     </div>
                   )}
                 </div>
-
-                {result.isLowCaptation && showResults && (
-                  <div className="flex items-center gap-3 p-4 rounded-xl bg-red-50 border border-red-200 text-red-700">
-                    <AlertTriangle className="w-5 h-5 flex-shrink-0" />
-                    <span className="font-bold text-sm">Captação durante as obras abaixo de {MIN_CAPTATION_PCT}% não é permitida!</span>
-                  </div>
-                )}
 
                 <button onClick={clearAll} className="flex items-center justify-center gap-2 w-full py-3 rounded-xl border border-slate-200 text-slate-600 font-semibold text-sm hover:bg-slate-50 transition-all">
                   <Trash2 className="w-4 h-4" /> Limpar Campos

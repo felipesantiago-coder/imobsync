@@ -108,7 +108,6 @@ interface CalculationResult {
   semesterRemaining: number;
   annualRemaining: number;
   habiteseBalance: number;
-  isLowCaptation: boolean;
   inccMonthlyRate: number;
   inccCorrectionFactor: number;
   inccAccumulatedPercent: number;
@@ -407,7 +406,6 @@ function SimulatorContent() {
         semesterRemaining: 0,
         annualRemaining: 0,
         habiteseBalance: 0,
-        isLowCaptation: false,
         inccMonthlyRate: 0,
         inccCorrectionFactor: 1,
         inccAccumulatedPercent: 0,
@@ -654,7 +652,6 @@ function SimulatorContent() {
       semesterRemaining: sRemaining,
       annualRemaining: aRemaining,
       habiteseBalance: hBalance,
-      isLowCaptation: captPct > 0 && captPct < (config?.percentual_captacao || 25),
       inccMonthlyRate,
       inccCorrectionFactor,
       inccAccumulatedPercent,
@@ -2065,15 +2062,6 @@ function SimulatorContent() {
                     </div>
                   ) : null}
                 </div>
-
-                {result.isLowCaptation && showResults && (
-                  <div className="flex items-center gap-3 p-4 rounded-xl bg-red-50 border border-red-200 text-red-700">
-                    <AlertTriangle className="w-5 h-5 flex-shrink-0" />
-                    <span className="font-bold text-sm">
-                      Captação abaixo de {config?.percentual_captacao || 25}% não é permitida!
-                    </span>
-                  </div>
-                )}
 
                 <button
                   onClick={clearAll}
