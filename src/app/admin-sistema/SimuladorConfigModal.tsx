@@ -19,6 +19,8 @@ interface SimuladorConfig {
   entrega_mes: number;
   entrega_ano: number;
   percentual_sinal: number;
+  sinal_parcelavel: boolean;
+  sinal_max_parcelas: number | null;
   percentual_captacao: number;
   semestrais_habilitado: boolean;
   anuais_habilitado: boolean;
@@ -61,6 +63,8 @@ export default function SimuladorConfigModal({
     entrega_mes: 12,
     entrega_ano: new Date().getFullYear() + 2,
     percentual_sinal: 5,
+    sinal_parcelavel: true,
+    sinal_max_parcelas: 3,
     percentual_captacao: 30,
     semestrais_habilitado: false,
     anuais_habilitado: false,
@@ -83,7 +87,7 @@ export default function SimuladorConfigModal({
       .then((r) => r.json())
       .then(async (data) => {
         if (data.config) {
-          setForm(data.config);
+          setForm((prev) => ({ ...prev, ...data.config }));
           setExistingConfig(true);
         } else {
           // Check if this empreendimento has a legacy simulator (slug-based route)
@@ -98,6 +102,8 @@ export default function SimuladorConfigModal({
             entrega_mes: 12,
             entrega_ano: new Date().getFullYear() + 2,
             percentual_sinal: 5,
+            sinal_parcelavel: true,
+            sinal_max_parcelas: 3,
             percentual_captacao: 30,
             semestrais_habilitado: false,
             anuais_habilitado: false,
@@ -301,6 +307,41 @@ export default function SimuladorConfigModal({
                     <p className="text-[10px] text-gray-400 mt-1">Sinal + mensais + opcionais + parcela única = captação</p>
                   </div>
                 </div>
+              </div>
+
+              {/* Parcelamento do Sinal Ato */}
+              <div>
+                <h3 className="text-sm font-bold text-gray-700 mb-3">Parcelamento do Sinal Ato</h3>
+                <label className="flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all mb-3 border-gray-200 hover:border-gray-300">
+                  <input
+                    type="checkbox"
+                    checked={form.sinal_parcelavel}
+                    onChange={(e) => setField("sinal_parcelavel", e.target.checked)}
+                    className="w-4 h-4 rounded accent-[#0D1B2A]"
+                  />
+                  <div>
+                    <span className="text-sm font-semibold text-gray-800">Sinal ato pode ser parcelado</span>
+                    <p className="text-[10px] text-gray-400">Se desativado, o sinal só poderá ser pago à vista (1 parcela)</p>
+                  </div>
+                </label>
+
+                {form.sinal_parcelavel && (
+                  <div className="pl-7 border-l-2 border-gray-200 ml-2">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Nº máximo de parcelas</label>
+                    <select
+                      value={form.sinal_max_parcelas || 3}
+                      onChange={(e) => setField("sinal_max_parcelas", parseInt(e.target.value))}
+                      className="w-full px-3 py-2.5 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-[#0D1B2A]/20 focus:border-[#0D1B2A] outline-none"
+                    >
+                      {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
+                        <option key={n} value={n}>
+                          {n} {n === 1 ? "parcela" : "parcelas"}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-gray-400 mt-1">O usuário poderá escolher de 1 até este limite</p>
+                  </div>
+                )}
               </div>
 
               {/* Tipos de Parcela Opcionais */}

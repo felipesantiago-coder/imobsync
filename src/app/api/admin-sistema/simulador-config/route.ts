@@ -53,6 +53,8 @@ export async function POST(request: NextRequest) {
       entrega_mes,
       entrega_ano,
       percentual_sinal,
+      sinal_parcelavel,
+      sinal_max_parcelas,
       percentual_captacao,
       semestrais_habilitado,
       anuais_habilitado,
@@ -102,6 +104,8 @@ export async function POST(request: NextRequest) {
       entrega_mes: parseInt(entrega_mes),
       entrega_ano: parseInt(entrega_ano),
       percentual_sinal: parseFloat(percentual_sinal) || 5,
+      sinal_parcelavel: sinal_parcelavel !== false,
+      sinal_max_parcelas: parseInt(sinal_max_parcelas) || 3,
       percentual_captacao: parseFloat(percentual_captacao) || 30,
       semestrais_habilitado: !!semestrais_habilitado,
       anuais_habilitado: !!anuais_habilitado,
@@ -155,6 +159,7 @@ export async function PUT(request: NextRequest) {
     const updateData: Record<string, unknown> = {};
     const allowedFields = [
       "entrega_mes", "entrega_ano", "percentual_sinal", "percentual_captacao",
+      "sinal_parcelavel", "sinal_max_parcelas",
       "semestrais_habilitado", "anuais_habilitado", "intermediarias_habilitado",
       "parcela_unica_habilitada", "taxa_decoracao",
       "taxa_decoracao_valor", "taxa_decoracao_parcelas", "taxa_decoracao_inicio", "taxa_decoracao_fim",
@@ -175,6 +180,8 @@ export async function PUT(request: NextRequest) {
     if (updateData.entrega_ano !== undefined) updateData.entrega_ano = parseInt(String(updateData.entrega_ano));
     if (updateData.percentual_sinal !== undefined) updateData.percentual_sinal = parseFloat(String(updateData.percentual_sinal));
     if (updateData.percentual_captacao !== undefined) updateData.percentual_captacao = parseFloat(String(updateData.percentual_captacao));
+    if (updateData.sinal_parcelavel !== undefined) updateData.sinal_parcelavel = !!updateData.sinal_parcelavel;
+    if (updateData.sinal_max_parcelas !== undefined) updateData.sinal_max_parcelas = parseInt(String(updateData.sinal_max_parcelas)) || 3;
     if (updateData.taxa_decoracao_valor !== undefined) updateData.taxa_decoracao_valor = updateData.taxa_decoracao_valor ? parseFloat(String(updateData.taxa_decoracao_valor)) : null;
     if (updateData.taxa_decoracao_parcelas !== undefined) updateData.taxa_decoracao_parcelas = updateData.taxa_decoracao_parcelas ? parseInt(String(updateData.taxa_decoracao_parcelas)) : null;
 

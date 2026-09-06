@@ -1239,12 +1239,9 @@ function SimulatorContent() {
                 <h4 className="font-bold text-slate-800 text-sm">Informações Importantes</h4>
               </div>
               <ul className="space-y-2 text-xs text-slate-500 list-disc list-inside">
-                <li>O sinal pode ser dividido em até 2 vezes com correção de INCC</li>
-                <li>As parcelas mensais começam no mês seguinte ao sinal e vão ate o mes anterior a entrega</li>
                 <li>As parcelas semestrais ocorrem a cada 6 meses, calculadas automaticamente</li>
                 <li>A parcela única (padrão {DEFAULT_UNICA_PERCENT}%) é paga no mês anterior à entrega</li>
-                <li>As parcelas não pagas durante as obras serão incluídas no financiamento</li>
-                <li>Captação mínima durante as obras: <strong>{MIN_CAPTATION_PERCENT}%</strong> do valor do imóvel</li>
+                <li>As parcelas não pagas durante as obras deverão ser quitadas ou incluídas no financiamento</li>
                 <li>Entrega prevista: <strong>{DELIVERY_MONTH_LABEL} de {DELIVERY_YEAR}</strong></li>
                 <li>Saldos devedores corrigidos mensalmente pelo INCC até o financiamento</li>
               </ul>

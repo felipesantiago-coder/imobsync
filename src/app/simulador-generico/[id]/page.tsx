@@ -57,6 +57,8 @@ interface SimuladorConfig {
   entrega_mes: number;
   entrega_ano: number;
   percentual_sinal: number;
+  sinal_parcelavel: boolean;
+  sinal_max_parcelas: number | null;
   percentual_captacao: number;
   semestrais_habilitado: boolean;
   anuais_habilitado: boolean;
@@ -313,6 +315,16 @@ function SimulatorContent() {
     downPaymentManual > 0
       ? downPaymentManual
       : finalPropertyValue * (defaultSinalPercent / 100);
+  // Parcelamento do sinal ato conforme decisão do administrador (simulador_configs).
+  // Fallback (config ausente): parcelável até 3 — comportamento histórico.
+  const sinalParcelavel = config?.sinal_parcelavel !== false;
+  const sinalMaxParcelas = sinalParcelavel
+    ? Math.min(12, Math.max(1, Math.round(config?.sinal_max_parcelas || 3)))
+    : 1;
+  const dpInstallments = Math.max(
+    1,
+    Math.min(parseInt(downPaymentInstallments) || 1, sinalMaxParcelas)
+  );
 
   // INCC helper
   const getInccMonthlyRate = (): number => {
@@ -435,12 +447,11 @@ function SimulatorContent() {
         : 1;
 
     // ── Sinal rows (no INCC) ──
-    const dpPerInstallment =
-      downPaymentValue / parseInt(downPaymentInstallments);
+    const dpPerInstallment = downPaymentValue / dpInstallments;
     const sinalRows: InstallmentRow[] = [];
-    for (let i = 1; i <= parseInt(downPaymentInstallments); i++) {
+    for (let i = 1; i <= dpInstallments; i++) {
       sinalRows.push({
-        parcela: `${i}/${downPaymentInstallments}`,
+        parcela: `${i}/${dpInstallments}`,
         data: formatDateBR(addMonthsToDate(dpDate, i - 1)),
         valor: formatBRL(dpPerInstallment),
       });
@@ -674,7 +685,7 @@ function SimulatorContent() {
     discount,
     downPaymentValue,
     downPaymentDate,
-    downPaymentInstallments,
+    dpInstallments,
     monthlyVal,
     semesterVal,
     annualVal,
@@ -1537,15 +1548,30 @@ function SimulatorContent() {
                   <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">
                     Número de Parcelas do Sinal
                   </label>
-                  <select
-                    value={downPaymentInstallments}
-                    onChange={(e) => setDownPaymentInstallments(e.target.value)}
-                    className="w-full h-12 px-4 rounded-xl border border-slate-200 bg-slate-50 text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:bg-white transition-all"
-                  >
-                    <option value="1">1 parcela</option>
-                    <option value="2">2 parcelas</option>
-                    <option value="3">3 parcelas</option>
-                  </select>
+                  {sinalParcelavel ? (
+                    <>
+                      <select
+                        value={String(dpInstallments)}
+                        onChange={(e) => setDownPaymentInstallments(e.target.value)}
+                        className="w-full h-12 px-4 rounded-xl border border-slate-200 bg-slate-50 text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:bg-white transition-all"
+                      >
+                        {Array.from({ length: sinalMaxParcelas }, (_, i) => i + 1).map((n) => (
+                          <option key={n} value={String(n)}>
+                            {n} {n === 1 ? "parcela" : "parcelas"}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-slate-500 mt-1">
+                        O sinal ato pode ser dividido em até {sinalMaxParcelas}{" "}
+                        {sinalMaxParcelas === 1 ? "parcela" : "parcelas"} mensais, a partir da data do primeiro
+                        pagamento.
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-xs text-slate-500">
+                      O sinal ato deve ser pago à vista, em parcela única.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -2309,24 +2335,14 @@ function SimulatorContent() {
                 </h4>
               </div>
               <ul className="space-y-2 text-xs text-slate-500 list-disc list-inside">
-                <li>
-                  O sinal pode ser dividido em até <strong>3 vezes</strong>
-                </li>
-                <li>
-                  As parcelas mensais começam no mês seguinte ao sinal
-                </li>
                 <li>Entrega prevista: <strong>{deliveryLabel}</strong></li>
                 <li>
-                  Parcelas não pagas durante as obras serão incluídas no
-                  financiamento
+                  Parcelas não pagas durante as obras deverão ser quitadas ou
+                  incluídas no financiamento
                 </li>
                 <li>
                   Saldos devedores corrigidos mensalmente pelo INCC até o
                   financiamento
-                </li>
-                <li>
-                  Captação mínima durante as obras: <strong>25%</strong> do
-                  valor do imóvel
                 </li>
                 {decoracaoEnabled && (
                   <li>

@@ -860,7 +860,6 @@ function SimulatorContent() {
                 <h4 className="font-bold text-slate-800 text-sm">Informações Importantes</h4>
               </div>
               <ul className="space-y-2 text-xs text-slate-500 list-disc list-inside">
-                <li>Captação mínima durante as obras: <strong>30%</strong> do valor do imóvel</li>
                 <li>Taxa de Decoração: <strong>R$ 20.065,00</strong> (10x de abr/2027 a jan/2028)</li>
                 <li>Entrega prevista: <strong>Fevereiro de 2028</strong></li>
                 <li>Saldos devedores corrigidos mensalmente pelo INCC até o financiamento</li>
