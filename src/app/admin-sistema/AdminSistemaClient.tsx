@@ -16,6 +16,7 @@ import {
   X,
   Check,
   AlertCircle,
+  AlertTriangle,
   Loader2,
   Shield,
   Users,
@@ -65,7 +66,7 @@ interface Empreendimento {
 // ─── Toast state ─────────────────────────────────────────────────────────────
 interface Toast {
   id: number;
-  type: "success" | "error";
+  type: "success" | "error" | "warning";
   message: string;
 }
 
@@ -542,8 +543,12 @@ export default function AdminSistemaClient() {
         if (json.inserted) parts.push(`${json.inserted} inseridas`);
         if (json.updated) parts.push(`${json.updated} atualizadas`);
         if (json.skipped) parts.push(`${json.skipped} ignoradas`);
-        if (json.errors) parts.push(`${json.errors} com erro`);
-        addToast("success", `Excel: ${parts.join(", ")} — ${json.total_units} unidades totais`);
+        const errCount = Array.isArray(json.errors) ? json.errors.length : 0;
+        const syncFailed = json.sync_failed || 0;
+        if (errCount) parts.push(`${errCount} com erro`);
+        if (syncFailed) parts.push(`${syncFailed} não replicada${syncFailed > 1 ? "s" : ""} ao espelho público`);
+        const toastType = errCount > 0 || syncFailed > 0 ? "warning" : "success";
+        addToast(toastType, `Excel: ${parts.join(", ") || "nenhuma alteração"} — ${json.total_units} unidades totais`);
         // Refresh to update unit counts
         fetchEmpreendimentos();
       } catch (err) {
@@ -1523,11 +1528,15 @@ export default function AdminSistemaClient() {
               className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border backdrop-blur-sm animate-[toastIn_0.3s_ease-out] ${
                 toast.type === "success"
                   ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-                  : "bg-red-50 border-red-200 text-red-800"
+                  : toast.type === "warning"
+                    ? "bg-amber-50 border-amber-200 text-amber-800"
+                    : "bg-red-50 border-red-200 text-red-800"
               }`}
             >
               {toast.type === "success" ? (
                 <Check className="w-4 h-4 shrink-0 text-emerald-600" />
+              ) : toast.type === "warning" ? (
+                <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600" />
               ) : (
                 <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
               )}

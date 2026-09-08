@@ -2,272 +2,30 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireAdminSistema } from "@/lib/admin-auth";
 import * as XLSX from "xlsx";
+import {
+  buildPartialUnitFromRow,
+  buildUnitIndex,
+  composeUnitToSave,
+  DEDICATED_TABLE_MAP,
+  findExistingUnit,
+  mapColumns,
+  TOTAL_KNOWN_FIELDS,
+  type DedicatedTableConfig,
+  type ExcelRow,
+} from "@/lib/excel-mirror";
 
 export const dynamic = "force-dynamic";
 
-// ─── Normalização de colunas ───────────────────────────────────────────────────
-// Converte um cabeçalho Excel para uma chave normalizada usada no COLUMN_MAP.
-// Ex: "Preço de Venda" → "preco_de_venda", "Área Privativa" → "area_privativa"
-function normalizeColumnName(col: string): string {
-  return col
-    .toLowerCase()
-    .trim()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]/g, "_")
-    .replace(/_+/g, "_")
-    .replace(/^_|_$/g, "");
-}
-
-// ─── Mapeamento de colunas (chaves já normalizadas) ───────────────────────────
-// Todas as chaves estão normalizadas (sem acentos, sem espaços, tudo minúsculo).
-// A função mapColumns normaliza o cabeçalho do Excel e compara com essas chaves.
-const COLUMN_MAP: Record<string, string> = {
-  andar: "andar",
-  pavimento: "andar",
-  floor: "andar",
-  unidade: "unidade",
-  no_unidade: "unidade",
-  numero: "unidade",
-  apto: "unidade",
-  apartamento: "unidade",
-  area: "area",
-  area_privativa: "area",
-  m2: "area",
-  m2_: "area",
-  metragem: "area",
-  quartos: "quartos",
-  dormitorios: "quartos",
-  quartos_dormitorios: "quartos",
-  suites: "quartos",
-  vagas: "vagas",
-  garagem: "vagas",
-  vagas_garagem: "vagas",
-  vaga: "vagas",
-  valor: "valor_venda",
-  valor_de_venda: "valor_venda",
-  valor_venda: "valor_venda",
-  valor_total: "valor_venda",
-  valor_da_unidade: "valor_venda",
-  preco: "valor_venda",
-  preco_de_venda: "valor_venda",
-  preco_total: "valor_venda",
-  status: "status",
-  posicao_solar: "posicao_solar",
-  posicao: "posicao_solar",
-  solar: "posicao_solar",
-  sol: "posicao_solar",
-  face: "posicao_solar",
-  tipologia: "tipologia",
-  tipo: "tipologia",
-  tipo_unidade: "tipologia",
-  planta: "tipologia",
-  bloco: "bloco",
-  torre: "bloco",
-  cobertura: "is_cobertura",
-  cobertura_: "is_cobertura",
-  garden: "is_garden",
-  garden_: "is_garden",
-};
-
-function mapColumns(
-  headers: string[]
-): { mapped: Record<string, string>; unmapped: string[] } {
-  const mapped: Record<string, string> = {};
-  const unmapped: string[] = [];
-
-  for (const header of headers) {
-    const normalized = normalizeColumnName(header);
-    const dbField = COLUMN_MAP[normalized];
-    if (dbField) {
-      mapped[header] = dbField;
-    } else {
-      unmapped.push(header);
-    }
-  }
-
-  return { mapped, unmapped };
-}
-
-// ─── Parsers de valores ────────────────────────────────────────────────────────
-function parseBrazilianNumber(value: unknown): number | null {
-  if (value === null || value === undefined || value === "") return null;
-  const str = String(value).trim();
-  if (str === "") return null;
-
-  // Brazilian format: 1.234.567,89
-  if (str.includes(",") && str.includes(".")) {
-    const cleaned = str.replace(/\./g, "").replace(",", ".");
-    const num = parseFloat(cleaned);
-    return isNaN(num) ? null : num;
-  }
-  if (str.includes(",")) {
-    const cleaned = str.replace(",", ".");
-    const num = parseFloat(cleaned);
-    return isNaN(num) ? null : num;
-  }
-
-  const num = parseFloat(str);
-  return isNaN(num) ? null : num;
-}
-
-function parseBoolean(value: unknown): boolean {
-  if (typeof value === "boolean") return value;
-  const str = String(value).toLowerCase().trim();
-  return ["sim", "s", "yes", "y", "true", "1", "x"].includes(str);
-}
-
-function parseStatus(value: unknown): string {
-  if (!value || value === "" || value === null || value === undefined) return "disponivel";
-  const str = String(value).toLowerCase().trim();
-  if (str === "disponível" || str === "disponivel" || str === "available") return "disponivel";
-  if (str === "reservada" || str === "reservado" || str === "reserved") return "reservado";
-  if (str === "vendida" || str === "vendido" || str === "sold") return "vendido";
-  return "disponivel";
-}
-
-// ─── Processamento de uma linha do Excel → campos do banco ────────────────────
-// Retorna APENAS os campos presentes no Excel (diferente de null/undefined/vazio).
-// Campos não enviados ficarão de fora para que o merge preserve os dados existentes.
-function buildPartialUnitFromRow(
-  row: Record<string, unknown>,
-  columnMapping: Record<string, string>,
-  empreendimentoId: string,
-  ordem: number
-): Record<string, unknown> {
-  const unit: Record<string, unknown> = {
-    empreendimento_id: empreendimentoId,
-    ordem,
-  };
-
-  for (const [header, dbField] of Object.entries(columnMapping)) {
-    const value = row[header];
-
-    if (dbField === "andar") {
-      const parsed = parseBrazilianNumber(value);
-      if (parsed !== null) unit.andar = parsed;
-    } else if (dbField === "unidade") {
-      const str = String(value ?? "").trim();
-      if (str) unit.unidade = str;
-    } else if (dbField === "area") {
-      const areaVal = parseBrazilianNumber(value);
-      if (areaVal !== null) {
-        unit.area = areaVal;
-        unit.area_str = `${areaVal} m²`;
-      }
-    } else if (dbField === "quartos") {
-      const parsed = parseBrazilianNumber(value);
-      if (parsed !== null) unit.quartos = parsed;
-    } else if (dbField === "vagas") {
-      const parsed = parseBrazilianNumber(value);
-      if (parsed !== null) unit.vagas = parsed;
-    } else if (dbField === "valor_venda") {
-      const parsed = parseBrazilianNumber(value);
-      if (parsed !== null) unit.valor_venda = parsed;
-    } else if (dbField === "status") {
-      const str = String(value ?? "").trim();
-      if (str) {
-        const statusVal = parseStatus(value);
-        unit.status = ["disponivel", "reservado", "vendido"].includes(statusVal) ? statusVal : "disponivel";
-      }
-    } else if (dbField === "posicao_solar") {
-      const str = String(value ?? "").trim();
-      if (str) unit.posicao_solar = str;
-    } else if (dbField === "tipologia") {
-      const str = String(value ?? "").trim();
-      if (str) unit.tipologia = str;
-    } else if (dbField === "bloco") {
-      const str = String(value ?? "").trim();
-      if (str) unit.bloco = str;
-    } else if (dbField === "is_cobertura") {
-      const str = String(value ?? "").trim();
-      if (str) unit.is_cobertura = parseBoolean(value);
-    } else if (dbField === "is_garden") {
-      const str = String(value ?? "").trim();
-      if (str) unit.is_garden = parseBoolean(value);
-    }
-  }
-
-  return unit;
-}
-
-// ─── Tabelas dedicadas por slug de empreendimento ──────────────────────────
-// Alguns empreendimentos possuem tabelas próprias
-// que alimentam seus espelhos de vendas. O upload precisa sincronizar ambas.
-const DEDICATED_TABLE_MAP: Record<string, {
-  table: string;
-  matchColumns: string[];      // colunas usadas no WHERE (ex: ["unidade"] ou ["bloco","unidade"])
-  castUnidadeToInt: boolean;   // tabelas legadas usam INTEGER, não TEXT
-  validSyncFields: string[];   // apenas estas colunas do commonFields serão sincronizadas
-}> = {
-  moment: {
-    table: "moment_units",
-    matchColumns: ["unidade"],
-    castUnidadeToInt: true,
-    validSyncFields: ["valor_venda", "status", "andar", "area", "area_str", "quartos", "vagas", "posicao_solar", "tipologia", "is_cobertura"],
-  },
-  "villa-bianco": {
-    table: "villa_bianco_units",
-    matchColumns: ["bloco", "unidade"],
-    castUnidadeToInt: true,
-    validSyncFields: ["valor_venda", "status", "andar", "area", "area_str", "quartos", "vagas", "posicao_solar", "tipologia", "is_cobertura"],
-  },
-  vitta: {
-    table: "vitta_units",
-    matchColumns: ["bloco", "unidade"],
-    castUnidadeToInt: true,
-    // vitta_units NÃO possui: quartos, vagas, posicao_solar, is_cobertura, is_garden
-    validSyncFields: ["valor_venda", "status", "andar", "area", "area_str", "tipologia"],
-  },
-  "quattre-istambul": {
-    table: "units",
-    matchColumns: ["unidade"],
-    castUnidadeToInt: true,
-    validSyncFields: ["valor_venda", "status", "andar", "area", "area_str", "quartos", "vagas", "posicao_solar", "tipologia"],
-  },
-};
-
-// ─── Sincronização com tabela dedicada ────────────────────────────────────
-async function syncToDedicatedTable(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  config: { table: string; matchColumns: string[]; castUnidadeToInt: boolean; validSyncFields: string[] },
-  partial: Record<string, unknown>,
-  matchData: Record<string, unknown>,
-) {
-  // Construir update com apenas os campos presentes no partial E permitidos na tabela dedicada
-  const updates: Record<string, unknown> = {};
-  for (const field of config.validSyncFields) {
-    if (partial[field] !== undefined) {
-      updates[field] = partial[field];
-    }
-  }
-  // area_str deve ser recalculado se area foi atualizado
-  if (updates.area !== undefined && !updates.area_str) {
-    updates.area_str = `${updates.area} m²`;
-  }
-  if (Object.keys(updates).length === 0) return;
-
-  // Construir WHERE a partir das colunas de match usando matchData (dados mesclados)
-  // Isso permite que update parcial sem a coluna 'bloco' ainda funcione,
-  // pois o bloco vem do registro existente no banco via unitToSave.
-  let query = supabase.from(config.table as any).update(updates);
-  for (const col of config.matchColumns) {
-    let val = matchData[col];
-    if (val === undefined || val === null || val === "") return;
-    if (config.castUnidadeToInt && col === "unidade") {
-      const parsed = parseInt(String(val), 10);
-      if (isNaN(parsed)) return;
-      val = parsed;
-    }
-    query = query.eq(col, val) as any;
-  }
-  const { error } = await query;
-  if (error) {
-    console.error(`Erro ao sincronizar com ${config.table}:`, error.message);
-  }
-}
-
 // ─── Endpoint POST ─────────────────────────────────────────────────────────────
+//
+// Semântica contratada da importação (atualização parcial):
+//   - APENAS os campos efetivamente preenchidos no Excel são atualizados;
+//   - campos em branco ou ausentes são IGNORADOS — o valor anterior permanece;
+//   - unidades existentes são atualizadas em praço (nunca duplicadas);
+//   - a atualização é replicada à tabela dedicada do espelho público
+//     (usuários/coordenadores) sempre que o empreendimento possuir uma;
+//   - falhas de gravação e de replicação são REPORTADAS na resposta — nunca
+//     "sucesso falso".
 export async function POST(request: NextRequest) {
   try {
     const isAllowed = await requireAdminSistema();
@@ -339,37 +97,55 @@ export async function POST(request: NextRequest) {
       .eq("id", empreendimentoId)
       .single();
 
-    // Detectar tabela dedicada (ex: moment → moment_units)
-    const dedicatedConfig = emp?.slug ? DEDICATED_TABLE_MAP[emp.slug] : null;
+    // Detectar tabela dedicada (espelho público: moment/villa-bianco/vitta/quattre)
+    const dedicatedConfig: DedicatedTableConfig | null = emp?.slug
+      ? DEDICATED_TABLE_MAP[emp.slug] ?? null
+      : null;
 
-    // Buscar unidades existentes em lote para merge inteligente (preserva dados não presentes no Excel)
+    // Buscar unidades existentes em projeto_units para casamento e merge parcial
+    // (preserva dados não presentes/preenchidos no Excel)
     const { data: existingUnits } = await supabase
       .from("projeto_units")
       .select("*")
       .eq("empreendimento_id", empreendimentoId);
 
-    // Indexar por (bloco + unidade) para lookup rápido — unidades com mesmo
-    // número em blocos diferentes devem ser tratadas como registros distintos.
-    const existingMap = new Map<string, Record<string, unknown>>();
-    if (existingUnits) {
-      for (const eu of existingUnits) {
-        const bloco = String((eu as Record<string, unknown>).bloco ?? "").trim();
-        const unidade = String(eu.unidade ?? "").trim();
-        if (unidade) {
-          const key = `${bloco.toLowerCase()}|${unidade.toLowerCase()}`;
-          existingMap.set(key, eu as Record<string, unknown>);
-        }
-      }
+    // Indexar: chave de negócio (bloco+unidade) e índice por unidade para
+    // tolerância a divergência de formatação entre planilhas.
+    const projetoIndex = buildUnitIndex(
+      (existingUnits ?? []) as ExcelRow[],
+      true
+    );
+
+    // Prefetch da tabela dedicada (1 consulta): baseline de valores antigos e
+    // alvo da replicação. Casamento em memória (rápido e testável).
+    let dedicatedIndex: ReturnType<typeof buildUnitIndex> | null = null;
+    if (dedicatedConfig) {
+      const { data: dedRows } = await supabase
+        .from(dedicatedConfig.table)
+        .select("*");
+      dedicatedIndex = buildUnitIndex(
+        (dedRows ?? []) as ExcelRow[],
+        dedicatedConfig.matchColumns.includes("bloco")
+      );
     }
 
-    // Determinar se o Excel é parcial (tem apenas algumas colunas) ou completo
+    // Informativo: quantos campos de negócio o Excel trouxe (para diagnóstico)
     const dbFieldsInExcel = new Set(Object.values(columnMapping));
-    const totalKnownFields = 12; // unidade, andar, area, quartos, vagas, valor_venda, status, posicao_solar, tipologia, bloco, is_cobertura, is_garden
-    const isPartialUpdate = dbFieldsInExcel.size < totalKnownFields;
+    const recognizedFields = dbFieldsInExcel.size;
+    const isPartialSpreadsheet = recognizedFields < TOTAL_KNOWN_FIELDS;
 
-    // Processar linhas com UPSERT inteligente (partial merge)
-    const results = { inserted: 0, updated: 0, skipped: 0, errors: 0 };
+    // Processar linhas com UPSERT parcial (campos em branco/ausentes ignorados)
+    const results = {
+      inserted: 0,
+      updated: 0,
+      skipped: 0,
+      errors: 0,
+      sync_ok: 0,
+      sync_failed: 0,
+    };
     const errorDetails: string[] = [];
+    const syncDetails: string[] = [];
+    const nowIso = new Date().toISOString();
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
@@ -382,24 +158,67 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      // Merge com dados existentes (se a unidade já existe no mesmo bloco)
-      let unitToSave: Record<string, unknown>;
-      const blocoKey = String(partial.bloco ?? "").trim().toLowerCase();
-      const existing = existingMap.get(`${blocoKey}|${unitName.toLowerCase()}`);
+      // 1) Localizar a unidade existente em projeto_units
+      //    (exato → tolerante a formatação; ambíguo → ignora com detalhe)
+      const projetoLookup = findExistingUnit(
+        projetoIndex,
+        { unidade: unitName, bloco: partial.bloco },
+        true
+      );
+      if (projetoLookup.kind === "ambiguous") {
+        results.skipped++;
+        const blocos = [...new Set(projetoLookup.candidates.map((c) => String(c.bloco ?? "")))].join(", ");
+        errorDetails.push(
+          `Linha ${i + 1} (${unitName}): unidade existe em múltiplos blocos (${blocos}) sem correspondência exata de bloco — linha ignorada para evitar duplicidade. Inclua a coluna 'bloco' com o valor exato.`
+        );
+        continue;
+      }
+      const projetoRow = projetoLookup.kind === "found" ? projetoLookup.row : null;
 
-      if (existing && isPartialUpdate) {
-        // Atualização parcial: preserva tudo que não veio no Excel
-        unitToSave = { ...existing, ...partial };
-        delete unitToSave.id; // Remove o ID para o upsert não conflitar
-      } else {
-        // Inserção nova ou Excel completo: usa os dados do Excel tal qual
-        unitToSave = partial;
+      // 2) Localizar a unidade na tabela dedicada (espelho público), se houver.
+      //    Se o Excel não informou bloco, usa o bloco da linha existente em
+      //    projeto_units como identidade.
+      let dedicatedRow: ExcelRow | null = null;
+      let dedicatedMissReason: string | null = null;
+      if (dedicatedConfig && dedicatedIndex) {
+        const withBloco = dedicatedConfig.matchColumns.includes("bloco");
+        const identBloco =
+          partial.bloco !== undefined
+            ? partial.bloco
+            : projetoRow
+              ? projetoRow.bloco
+              : undefined;
+        const dedLookup = findExistingUnit(
+          dedicatedIndex,
+          { unidade: unitName, bloco: identBloco },
+          withBloco
+        );
+        if (dedLookup.kind === "found") {
+          dedicatedRow = dedLookup.row;
+        } else if (dedLookup.kind === "ambiguous") {
+          dedicatedMissReason = "correspondência ambígua na tabela dedicada";
+        } else {
+          dedicatedMissReason = "unidade não encontrada na tabela dedicada";
+        }
       }
 
+      // 3) Compor a linha final:
+      //      Excel preenchido > projeto_units (não nulo) > tabela dedicada
+      //    Campos em branco/ausentes no Excel mantêm o valor anterior.
+      const unitToSave = composeUnitToSave({
+        partial,
+        projetoRow,
+        dedicatedRow,
+        nowIso,
+      });
       // Garantir que bloco nunca seja null (necessário para unique constraint)
       if (!unitToSave.bloco) unitToSave.bloco = "";
 
-      // Upsert na tabela genérica: se já existir (empreendimento_id + bloco + unidade), atualiza; senão insere
+      // Unidade já conhecida em algum espelho → atualização; senão → inserção
+      const hadBaseline = projetoRow !== null || dedicatedRow !== null;
+
+      // Upsert na tabela genérica: se já existir (empreendimento_id + bloco + unidade),
+      // atualiza; senão insere
       const { error: upsertErr } = await supabase
         .from("projeto_units")
         .upsert(unitToSave, {
@@ -414,11 +233,43 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      // Sincronizar com tabela dedicada (se existir)
-      // Passa unitToSave (dados mesclados) para o WHERE, pois pode conter
-      // colunas de match (ex: bloco) ausentes do Excel mas presentes no banco.
+      if (hadBaseline) results.updated++;
+      else results.inserted++;
+
+      // 4) Replicar à tabela dedicada (espelho público) — APENAS campos
+      //    preenchidos no Excel; campos em branco não são tocados.
       if (dedicatedConfig) {
-        await syncToDedicatedTable(supabase, dedicatedConfig, partial, unitToSave);
+        const updates: Record<string, unknown> = {};
+        for (const field of dedicatedConfig.validSyncFields) {
+          if (partial[field] !== undefined) updates[field] = partial[field];
+        }
+        // area_str deve ser recalculado se area foi atualizado
+        if (updates.area !== undefined && !updates.area_str) {
+          updates.area_str = `${updates.area} m²`;
+        }
+
+        if (Object.keys(updates).length === 0) {
+          // Nada preenchido para esta unidade — nada a replicar (não é falha)
+        } else if (dedicatedRow && dedicatedRow.id) {
+          const { error: syncErr } = await supabase
+            .from(dedicatedConfig.table)
+            .update(updates)
+            .eq("id", String(dedicatedRow.id));
+          if (syncErr) {
+            results.sync_failed++;
+            syncDetails.push(
+              `Linha ${i + 1} (${unitName}): falha ao replicar para ${dedicatedConfig.table}: ${syncErr.message}`
+            );
+            console.error(`Erro ao sincronizar com ${dedicatedConfig.table}:`, syncErr.message);
+          } else {
+            results.sync_ok++;
+          }
+        } else {
+          results.sync_failed++;
+          syncDetails.push(
+            `Linha ${i + 1} (${unitName}): ${dedicatedMissReason ?? "unidade não encontrada na tabela dedicada"} (${dedicatedConfig.table}) — atualização não replicada ao espelho público`
+          );
+        }
       }
     }
 
@@ -433,7 +284,9 @@ export async function POST(request: NextRequest) {
       total_units: totalUnits ?? 0,
       total_rows: rows.length,
       columns: columnMapping,
+      partial_spreadsheet: isPartialSpreadsheet,
       errors: errorDetails.length > 0 ? errorDetails : undefined,
+      sync_details: syncDetails.length > 0 ? syncDetails : undefined,
     });
   } catch (err) {
     console.error("Erro no upload de Excel:", err);
