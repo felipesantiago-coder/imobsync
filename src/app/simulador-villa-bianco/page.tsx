@@ -979,9 +979,8 @@ function SimulatorContent() {
                 <h4 className="font-bold text-slate-800 text-sm">Informações Importantes</h4>
               </div>
               <ul className="space-y-2 text-xs text-slate-500 list-disc list-inside">
-                <li>Taxa de Decoração: <strong>R$ 10.000,00</strong> (parcelas mensais até a entrega)</li>
                 <li>Entrega prevista: <strong>Outubro de 2027</strong></li>
-                <li>Saldos devedores corrigidos mensalmente pelo INCC até o financiamento</li>
+                <li>Saldos devedores corrigidos mensalmente pelo INCC até o habite-se</li>
               </ul>
             </div>
           </div>

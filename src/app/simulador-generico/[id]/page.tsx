@@ -2335,19 +2335,9 @@ function SimulatorContent() {
               <ul className="space-y-2 text-xs text-slate-500 list-disc list-inside">
                 <li>Entrega prevista: <strong>{deliveryLabel}</strong></li>
                 <li>
-                  Parcelas não pagas durante as obras deverão ser quitadas ou
-                  incluídas no financiamento
-                </li>
-                <li>
                   Saldos devedores corrigidos mensalmente pelo INCC até o
-                  financiamento
+                  habite-se
                 </li>
-                {decoracaoEnabled && (
-                  <li>
-                    A taxa de decoração ({formatBRL(decoracaoTotalValue)}) é
-                    cobrada separadamente e não compõe a captação
-                  </li>
-                )}
               </ul>
             </div>
           </div>

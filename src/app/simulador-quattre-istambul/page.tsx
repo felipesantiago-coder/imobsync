@@ -1067,10 +1067,8 @@ function SimulatorContent() {
                 <h4 className="font-bold text-slate-800 text-sm">Informações Importantes</h4>
               </div>
               <ul className="space-y-2 text-xs text-slate-500 list-disc list-inside">
-                <li>A primeira parcela semestral é 6 meses após o sinal</li>
                 <li>Entrega prevista: <strong>Novembro de 2027</strong></li>
-                <li>Parcelas não pagas durante as obras deverão ser quitadas ou incluídas no financiamento</li>
-                <li>Saldos devedores corrigidos mensalmente pelo INCC até o financiamento</li>
+                <li>Saldos devedores corrigidos mensalmente pelo INCC até o habite-se</li>
               </ul>
             </div>
           </div>

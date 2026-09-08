@@ -998,10 +998,8 @@ function SimulatorContent() {
                 <h4 className="font-bold text-slate-800 text-sm">Informações Importantes</h4>
               </div>
               <ul className="space-y-2 text-xs text-slate-500 list-disc list-inside">
-                <li>Máx. mensais: <strong>{MAX_MONTHLY_INSTALLMENTS} parcelas</strong> | Máx. semestrais: <strong>{MAX_SEMESTER_INSTALLMENTS} parcelas</strong></li>
-                <li>Parcela única padrão: <strong>5%</strong> do valor final (paga na entrega)</li>
                 <li>Entrega prevista: <strong>Agosto de 2029</strong></li>
-                <li>Saldos devedores corrigidos mensalmente pelo INCC até o financiamento</li>
+                <li>Saldos devedores corrigidos mensalmente pelo INCC até o habite-se</li>
               </ul>
             </div>
           </div>
