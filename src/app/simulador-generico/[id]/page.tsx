@@ -1126,10 +1126,8 @@ function SimulatorContent() {
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
     const notes = [
-      "As parcelas mensais começam no mês seguinte ao sinal.",
-      "As parcelas não pagas durante as obras serão incluídas ao saldo devedor para o financiamento.",
-      "O saldo devedor deverá ser quitado até o financiamento ou financiado com o banco de preferência após emissão do financiamento.",
-      "Importante: Os saldos devedores de todas as parcelas serão corrigidos mensalmente pelo INCC (Índice Nacional de Custo da Construção) até o financiamento.",
+      "O saldo devedor deverá ser quitado até o habite-se ou financiado com o banco de preferência.",
+      "Importante: Os saldos devedores de todas as parcelas serão corrigidos mensalmente pelo INCC (Índice Nacional de Custo da Construção) até o habite-se e posteriormente por IGPM + 1%.",
       "Os valores, condições e disponibilidade apresentados podem sofrer alteração sem aviso prévio.",
       `Entrega prevista: ${deliveryLabel}.`,
     ];

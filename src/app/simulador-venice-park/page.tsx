@@ -632,9 +632,8 @@ function SimulatorContent() {
     doc.setTextColor(60, 60, 60);
     const notes = [
       `A parcela unica e paga no mes anterior ao mes de entrega do empreendimento (setembro de ${DELIVERY_YEAR}). A entrega prevista e ${DELIVERY_MONTH_LABEL} de ${DELIVERY_YEAR}.`,
-      "As parcelas nao pagas durante as obras serao incluidas ao saldo devedor para o financiamento.",
-      "O saldo devedor devera ser quitado ate o financiamento ou financiado com o banco de preferencia apos emissao do financiamento.",
-      "Importante: Os saldos devedores de todas as parcelas serao corrigidos mensalmente pelo INCC (Indice Nacional de Custo da Construcao) ate o financiamento.",
+      "O saldo devedor devera ser quitado ate o habite-se ou financiado com o banco de preferencia.",
+      "Importante: Os saldos devedores de todas as parcelas serao corrigidos mensalmente pelo INCC (Indice Nacional de Custo da Construcao) ate o habite-se e posteriormente por IGPM + 1%.",
       `A captacao durante as obras deve ser de no minimo ${MIN_CAPTATION_PERCENT}% do valor do imovel.`,
       "Os valores, condicoes e disponibilidade apresentados podem sofrer alteracao sem aviso previo.",
     ];

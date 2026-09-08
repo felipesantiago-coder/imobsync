@@ -549,14 +549,13 @@ function SimulatorContent() {
     doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(60, 60, 60);
     const notes = [
       "O sinal é pago à vista.",
-      "As parcelas mensais começam no mês seguinte ao sinal.",
       "A parcela única é paga no mês de entrega do empreendimento.",
       "A primeira parcela semestral é 6 meses após o sinal.",
       `A construtora permite dividir as mensais em até ${MAX_MONTHLY_INSTALLMENTS} meses e as semestrais em até ${MAX_SEMESTER_INSTALLMENTS} semestrais.`,
       "Todas as parcelas mensais contratadas compõem a captação da obra, inclusive as remanescentes que são pagas após a entrega. O cliente pode pagá-las diretamente à construtora ou integrá-las ao financiamento bancário.",
       "As parcelas semestrais que não couberem até o mês de entrega são integradas ao saldo devedor pós financiamento.",
       "O saldo devedor no financiamento pode ser quitado ou financiado com o banco de preferência.",
-      "Importante: Os saldos devedores de todas as parcelas serão corrigidos mensalmente pelo INCC (Índice Nacional de Custo da Construção) até o financiamento.",
+      "Importante: Os saldos devedores de todas as parcelas serão corrigidos mensalmente pelo INCC (Índice Nacional de Custo da Construção) até o habite-se e posteriormente por IGPM + 1%.",
       `Captação mínima: A captação durante as obras deve ser de no mínimo ${MIN_CAPTATION_PCT}% do valor do imóvel.`,
       "Os valores, condições e disponibilidade apresentados podem sofrer alteração sem aviso prévio.",
     ];

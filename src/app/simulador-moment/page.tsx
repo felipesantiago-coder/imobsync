@@ -449,11 +449,10 @@ function SimulatorContent() {
     doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(60, 60, 60);
     const notes = [
       "O sinal é pago à vista.",
-      "As parcelas mensais começam no mês seguinte ao sinal.",
       "A primeira parcela semestral é 6 meses após o sinal.",
       "O número de parcelas pagas durante as obras é calculado automaticamente com base na data do sinal e na entrega prevista para fevereiro de 2028.",
       "O saldo devedor no financiamento pode ser quitado ou financiado com o banco de preferência.",
-      "Importante: Os saldos devedores de todas as parcelas serão corrigidos mensalmente pelo INCC (Índice Nacional de Custo da Construção) até o financiamento.",
+      "Importante: Os saldos devedores de todas as parcelas serão corrigidos mensalmente pelo INCC (Índice Nacional de Custo da Construção) até o habite-se e posteriormente por IGPM + 1%.",
       "Captação mínima: A captação durante as obras deve ser de no mínimo 30% do valor do imóvel.",
       "A Taxa de Decoração de R$ 20.065,00 é dividida em 10 parcelas fixas de R$ 2.006,50, pagas de abril de 2027 a janeiro de 2028 (10 meses antes da entrega).",
       "Os valores, condições e disponibilidade apresentados podem sofrer alteração sem aviso prévio.",
