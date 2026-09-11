@@ -8,8 +8,9 @@
  * `requireReadAccess()` → `requireActiveSubscription()`:
  *   - admin_sistema e coordenador: sempre podem ler (definição de "admin"
  *     idêntica à do guard — manter em sincronia com subscription-guard.ts);
- *   - demais perfis: verificação completa de assinatura via requireReadAccess()
- *     (inclui lazy expiration — mesma lógica, mesma frequência por request).
+ *   - demais perfis: verificação completa de assinatura (inclui lazy
+ *     expiration — mesma lógica, agora reaproveitando o usuário já validado
+ *     nesta request, sem re-autenticação duplicada).
  *
  * `user` e `role` devem ser obtidos na MESMA request server-side
  * (supabase.auth.getUser() + profiles.role) — reuso de contexto por request
@@ -22,8 +23,7 @@
  * (fetch → API → mesmo resultado observado hoje, inclusive o estado vazio).
  */
 
-import { createClient } from "@/lib/supabase/server";
-import { requireReadAccess } from "@/lib/api-auth";
+import { hasValidSubscriptionForUser } from "@/lib/subscription-guard";
 
 /** Linha bruta do PostgREST (select("*")) — serializável via RSC props. */
 export type InitialUnitsRow = Record<string, unknown>;
@@ -32,6 +32,12 @@ export type InitialUnitsRow = Record<string, unknown>;
  * Decide se o usuário pode ler unidades, com a mesma semântica das APIs.
  * @param user Usuário já validado por auth.getUser() nesta request (ou null)
  * @param role Role já consultada em profiles nesta request (ou null/undefined)
+ *
+ * Contexto de auth por request (audit V07): para perfis comuns, NÃO repete
+ * auth.getUser() + profiles — o user.id recebido já foi validado por cookie
+ * nesta mesma request; a verificação de assinatura é feita AGORA (consulta
+ * nova, com lazy expiration), sem TTL e sem estado global. Para
+ * admin_sistema/coordenador o bypass permanece idêntico.
  */
 export async function canReadUnits(
   user: { id: string } | null,
@@ -44,8 +50,8 @@ export async function canReadUnits(
   // sem consulta de assinatura. Manter em sincronia.
   if (role === "admin_sistema" || role === "coordenador") return true;
 
-  // Demais perfis: caminho completo do guard (auth + perfil + assinatura),
-  // sem alteração nenhuma no código de autorização existente.
-  const denied = await requireReadAccess();
-  return !denied;
+  // Demais perfis: assinatura consultada agora para o usuário já autenticado
+  // nesta request (mesma decisão de requireActiveSubscription, sem repetir
+  // a autenticação que a página já fez).
+  return hasValidSubscriptionForUser(user.id);
 }

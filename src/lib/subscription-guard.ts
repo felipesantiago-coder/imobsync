@@ -35,6 +35,67 @@ export interface SubscriptionGuardDenied {
 
 type SubscriptionGuardResponse = SubscriptionGuardResult | SubscriptionGuardDenied;
 
+type SubscriptionRow = {
+  id: string;
+  status: string;
+  data_fim: string | null;
+  user_id: string;
+};
+
+async function fetchLatestSubscription(
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string
+) {
+  return admin
+    .from('assinaturas')
+    .select('id, status, data_fim, user_id')
+    .eq('user_id', userId)
+    .in('status', ['active', 'lifetime'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+}
+
+/**
+ * Avaliação PURA da validade temporal da assinatura (testável).
+ * - lifetime: nunca expira;
+ * - active: precisa de data_fim > now() ou data_fim = null (plano pré-migration).
+ */
+export function evaluateSubscriptionValidity(
+  assinatura: Pick<SubscriptionRow, 'status' | 'data_fim'>,
+  now: Date = new Date()
+): { valid: boolean; expired: boolean } {
+  if (assinatura.status === 'lifetime') return { valid: true, expired: false };
+  if (assinatura.data_fim) {
+    const expired = new Date(assinatura.data_fim) <= now;
+    return { valid: !expired, expired };
+  }
+  return { valid: true, expired: false };
+}
+
+/**
+ * Verifica se o usuário (já autenticado nesta request) possui assinatura
+ * válida — consulta a assinatura AGORA, sem TTL e sem estado global.
+ * Reaproveitável na mesma request por guards que já receberam user/role
+ * validados (ex.: canReadUnits), evitando re-autenticação duplicada.
+ * Preserva o lazy expiration de assinaturas vencidas.
+ */
+export async function hasValidSubscriptionForUser(userId: string): Promise<boolean> {
+  const admin = createAdminClient();
+  const { data: assinatura, error: assErr } = await fetchLatestSubscription(admin, userId);
+
+  if (assErr || !assinatura) return false;
+
+  const { valid, expired } = evaluateSubscriptionValidity(assinatura);
+  if (expired) {
+    expireSubscriptionLazy(admin, assinatura.id, userId).catch((err) => {
+      console.error(`[subscription-guard] Erro ao expirar assinatura ${assinatura.id}:`, err);
+    });
+    return false;
+  }
+  return valid;
+}
+
 /**
  * Verifica se o usuário autenticado possui assinatura ativa E dentro do período válido.
  * Atualiza automaticamente assinaturas vencidas (lazy expiration).
@@ -80,22 +141,15 @@ export async function requireActiveSubscription(): Promise<SubscriptionGuardResp
 
   // 3. Buscar assinatura mais recente do usuário
   const admin = createAdminClient();
-  const { data: assinatura, error: assErr } = await admin
-    .from('assinaturas')
-    .select('id, status, data_fim, user_id')
-    .eq('user_id', user.id)
-    .in('status', ['active', 'lifetime'])
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const { data: assinatura, error: assErr } = await fetchLatestSubscription(admin, user.id);
 
   if (assErr || !assinatura) {
     return { valid: false, reason: 'no_subscription', userId: user.id };
   }
 
   // 4. Verificar validade temporal
-  //    - lifetime: nunca expira
-  //    - active: precisa de data_fim > now() ou data_fim = null (plano pré-migration)
+  const { expired } = evaluateSubscriptionValidity(assinatura);
+
   if (assinatura.status === 'lifetime') {
     return {
       valid: true,
@@ -107,22 +161,16 @@ export async function requireActiveSubscription(): Promise<SubscriptionGuardResp
     };
   }
 
-  // Assinatura active — verificar data_fim
-  if (assinatura.data_fim) {
-    const agora = new Date();
-    const fim = new Date(assinatura.data_fim);
+  if (expired) {
+    // Assinatura vencida! Expirar lazy (em background)
+    expireSubscriptionLazy(admin, assinatura.id, user.id).catch((err) => {
+      console.error(`[subscription-guard] Erro ao expirar assinatura ${assinatura.id}:`, err);
+    });
 
-    if (fim <= agora) {
-      // Assinatura vencida! Expirar lazy (em background)
-      expireSubscriptionLazy(admin, assinatura.id, user.id).catch((err) => {
-        console.error(`[subscription-guard] Erro ao expirar assinatura ${assinatura.id}:`, err);
-      });
-
-      return { valid: false, reason: 'subscription_expired', userId: user.id };
-    }
+    return { valid: false, reason: 'subscription_expired', userId: user.id };
   }
 
-  // Assinatura ativa e dentro do período
+  // Assinatura ativa e dentro do período (expired já tratado acima)
   return {
     valid: true,
     userId: user.id,
