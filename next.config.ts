@@ -47,7 +47,11 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  output: "standalone",
+  // Standalone apenas para SELF-HOSTING (npm run build:standalone define
+  // NEXT_OUTPUT=standalone). Na Vercel, o adaptador nativo usa o output
+  // padrão do Next — produzir standalone ali não serve ao runtime e inflaria
+  // o armazenamento de deployment (~65 MB por deploy).
+  output: process.env.NEXT_OUTPUT === "standalone" ? "standalone" : undefined,
   images: {
     unoptimized: true,
   },
