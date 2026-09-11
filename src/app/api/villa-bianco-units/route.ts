@@ -73,7 +73,7 @@ export async function PATCH(request: NextRequest) {
       const { data: { user: authUser } } = await supabase.auth.getUser();
       const { data: profile } = await supabase.from("profiles").select("role").eq("id", authUser?.id).maybeSingle();
       if (authUser) {
-        trackUnitStatusChange({
+        await trackUnitStatusChange({
           unitId: data.id,
           empreendimentoId: "villa-bianco",
           unidade: String(unidade),
