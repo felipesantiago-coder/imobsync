@@ -126,9 +126,10 @@ export async function PATCH(
       return NextResponse.json({ error: "Erro ao atualizar unidade" }, { status: 500 });
     }
 
-    // Track status change (fire-and-forget)
+    // Track status change (aguardado: histórico essencial deve completar
+    // antes da resposta para não ser congelado no ciclo da Function)
     if (user) {
-      trackUnitStatusChange({
+      await trackUnitStatusChange({
         unitId: data.id,
         empreendimentoId: id,
         unidade: String(unidade),

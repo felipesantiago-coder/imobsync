@@ -35,6 +35,15 @@ export default function AguardandoPagamentoClient({
   const [activated, setActivated] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Controle de concorrência e ciclo de vida do polling:
+  // - inFlightRef: uma ÚNICA consulta por aba (sem sobreposição auto/manual);
+  // - mountedRef/abortRef: respostas tardias após logout/unmount são ignoradas.
+  const inFlightRef = useRef(false);
+  const mountedRef = useRef(true);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const POLL_INTERVAL_MS = 15_000; // cadência visível preservada (15s)
+  const POLL_MAX_DURATION_MS = 30 * 60 * 1000; // parar após 30 minutos
 
   // Contador de tempo decorrido
   useEffect(() => {
@@ -45,48 +54,114 @@ export default function AguardandoPagamentoClient({
     return () => clearInterval(timer);
   }, []);
 
-  // Poll para verificar se o pagamento foi confirmado
-  const checkSubscription = useCallback(async () => {
+  const stopPolling = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+  }, []);
+
+  // Poll para verificar se o pagamento foi confirmado.
+  // `source: "manual"` (botão) ignora a pausa de visibilidade/offline — a
+  // intenção do usuário é explícita. `source: "auto"` pula ticks quando a
+  // aba está oculta ou offline e quando já existe consulta em voo.
+  const checkSubscription = useCallback(async (source: "auto" | "manual" = "auto") => {
+    if (inFlightRef.current) return;
+    if (
+      source === "auto" &&
+      typeof document !== "undefined" &&
+      document.hidden
+    ) {
+      return;
+    }
+    if (
+      source === "auto" &&
+      typeof navigator !== "undefined" &&
+      !navigator.onLine
+    ) {
+      return;
+    }
+    inFlightRef.current = true;
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
-      const res = await fetch('/api/subscription-check');
-      if (res.ok) {
+      const res = await fetch("/api/subscription-check", {
+        signal: controller.signal,
+      });
+      if (mountedRef.current && res.ok) {
         const data = await res.json();
-        if (data.subscriptionActive) {
+        if (data.subscriptionActive && mountedRef.current) {
           setActivated(true);
           // Parar polling
-          if (intervalRef.current) clearInterval(intervalRef.current);
-          if (timeoutRef.current) clearTimeout(timeoutRef.current);
+          stopPolling();
           // Cookie agora é setado pelo /api/subscription-check com HttpOnly + Secure
           // Redirecionar após breve delay para o usuário ver o sucesso
           setTimeout(() => {
-            router.push('/projetos');
+            if (!mountedRef.current) return;
+            router.push("/projetos");
             router.refresh();
           }, 2000);
         }
       }
     } catch {
-      // Silently fail
+      // Silently fail (inclui abort no unmount/logout)
+    } finally {
+      inFlightRef.current = false;
+      if (abortRef.current === controller) abortRef.current = null;
     }
-  }, [router]);
+  }, [router, stopPolling]);
 
-  // Iniciar polling automático a cada 5 segundos
+  // Iniciar polling automático a cada 15 segundos (comentário antigo dizia
+  // 5s — corrigido para refletir o intervalo real). Para após 30 minutos.
   useEffect(() => {
-    intervalRef.current = setInterval(checkSubscription, 15000);
+    mountedRef.current = true;
+    intervalRef.current = setInterval(() => {
+      void checkSubscription("auto");
+    }, POLL_INTERVAL_MS);
 
     // Parar polling após 30 minutos
     timeoutRef.current = setTimeout(() => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    }, 30 * 60 * 1000);
+      stopPolling();
+    }, POLL_MAX_DURATION_MS);
 
     return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      stopPolling();
+    };
+  }, [checkSubscription, stopPolling]);
+
+  // Verificação imediata ao retornar à aba ou reconectar (guardadas pelas
+  // mesmas regras de single-flight e ciclo de vida)
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (!document.hidden) void checkSubscription("auto");
+    };
+    const onOnline = () => {
+      void checkSubscription("auto");
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("online", onOnline);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("online", onOnline);
     };
   }, [checkSubscription]);
 
+  // Proteger respostas tardias após unmount/logout: ignora estado e aborta
+  // a consulta em voo
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+      abortRef.current?.abort();
+    };
+  }, []);
+
   const handleManualCheck = async () => {
     setChecking(true);
-    await checkSubscription();
+    await checkSubscription("manual");
     setTimeout(() => setChecking(false), 1000);
   };
 

@@ -13,8 +13,58 @@ import {
   type DedicatedTableConfig,
   type ExcelRow,
 } from "@/lib/excel-mirror";
+import {
+  chunk,
+  conflictKeyOf,
+  DEDICATED_CONCURRENCY,
+  DEDICATED_ID_CHUNK,
+  dedupeUpsertPayloads,
+  groupDedicatedOps,
+  MAX_EXCEL_BYTES,
+  MAX_EXCEL_ROWS,
+  UPSERT_CHUNK,
+  type DedicatedOp,
+  type UpsertItem,
+} from "@/lib/excel-batch";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * Refaz os updates dedicados um por um para atribuir falhas por unidade.
+ * Usado quando o update agrupado (.in ids) falha — preserva o feedback
+ * por linha do fluxo sequencial sem perder as unidades que succeeded.
+ */
+async function reprocessDedicatedIndividually(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  table: string,
+  ops: { rowNo: number; unitName: string; id: string; payload: Record<string, unknown> }[],
+  results: { sync_ok: number; sync_failed: number },
+  syncDetails: string[]
+): Promise<void> {
+  for (const op of ops) {
+    try {
+      const { error: syncErr } = await supabase
+        .from(table)
+        .update(op.payload)
+        .eq("id", op.id);
+      if (syncErr) {
+        results.sync_failed++;
+        syncDetails.push(
+          `Linha ${op.rowNo} (${op.unitName}): falha ao replicar para ${table}: ${syncErr.message}`
+        );
+        console.error(`Erro ao sincronizar com ${table}:`, syncErr.message);
+      } else {
+        results.sync_ok++;
+      }
+    } catch (err) {
+      results.sync_failed++;
+      syncDetails.push(
+        `Linha ${op.rowNo} (${op.unitName}): exceção ao replicar para ${table}: ${String(err)}`
+      );
+      console.error(`Exceção ao sincronizar com ${table}:`, err);
+    }
+  }
+}
 
 // ─── Endpoint POST ─────────────────────────────────────────────────────────────
 //
@@ -53,6 +103,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validar tamanho e forma do arquivo ANTES do processamento oneroso
+    if (file.size > MAX_EXCEL_BYTES) {
+      return NextResponse.json(
+        { error: `O arquivo excede o limite de ${Math.round(MAX_EXCEL_BYTES / (1024 * 1024))} MB` },
+        { status: 413 }
+      );
+    }
+
     // Parsear Excel
     const buffer = Buffer.from(await file.arrayBuffer());
     const workbook = XLSX.read(buffer, { type: "buffer" });
@@ -62,6 +120,13 @@ export async function POST(request: NextRequest) {
 
     if (rows.length === 0) {
       return NextResponse.json({ error: "O arquivo Excel está vazio" }, { status: 400 });
+    }
+
+    if (rows.length > MAX_EXCEL_ROWS) {
+      return NextResponse.json(
+        { error: `O arquivo contém ${rows.length} linhas; o limite por importação é ${MAX_EXCEL_ROWS}. Divida a planilha.` },
+        { status: 413 }
+      );
     }
 
     // Mapear colunas
@@ -134,7 +199,11 @@ export async function POST(request: NextRequest) {
     const recognizedFields = dbFieldsInExcel.size;
     const isPartialSpreadsheet = recognizedFields < TOTAL_KNOWN_FIELDS;
 
-    // Processar linhas com UPSERT parcial (campos em branco/ausentes ignorados)
+    // ─── FASE 1: Classificação (pura, em memória) ───────────────────────────
+    // Mesmas decisões do fluxo sequencial (skip, ambiguidade, casamento,
+    // precedência), mas SEM gravar linha a linha. Nenhuma decisão aqui
+    // depende do resultado de um upsert anterior: os índices são snapshots
+    // pré-loop, exatamente como antes.
     const results = {
       inserted: 0,
       updated: 0,
@@ -146,6 +215,10 @@ export async function POST(request: NextRequest) {
     const errorDetails: string[] = [];
     const syncDetails: string[] = [];
     const nowIso = new Date().toISOString();
+
+    const classified: UpsertItem[] = [];
+    const dedicatedOpsByRowNo = new Map<number, DedicatedOp>();
+    const dedicatedMissesByRowNo = new Map<number, string>();
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
@@ -217,27 +290,17 @@ export async function POST(request: NextRequest) {
       // Unidade já conhecida em algum espelho → atualização; senão → inserção
       const hadBaseline = projetoRow !== null || dedicatedRow !== null;
 
-      // Upsert na tabela genérica: se já existir (empreendimento_id + bloco + unidade),
-      // atualiza; senão insere
-      const { error: upsertErr } = await supabase
-        .from("projeto_units")
-        .upsert(unitToSave, {
-          onConflict: "empreendimento_id,bloco,unidade",
-          count: "exact",
-        });
+      const item: UpsertItem = {
+        rowNo: i + 1,
+        unitName,
+        key: conflictKeyOf(unitToSave),
+        kind: hadBaseline ? "updated" : "inserted",
+        payload: unitToSave,
+      };
+      classified.push(item);
 
-      if (upsertErr) {
-        results.errors++;
-        errorDetails.push(`Linha ${i + 1} (${unitName}): ${upsertErr.message}`);
-        console.error(`Erro ao upsert linha ${i + 1}:`, upsertErr.message);
-        continue;
-      }
-
-      if (hadBaseline) results.updated++;
-      else results.inserted++;
-
-      // 4) Replicar à tabela dedicada (espelho público) — APENAS campos
-      //    preenchidos no Excel; campos em branco não são tocados.
+      // 4) Preparar replicação dedicada (APENAS campos preenchidos no Excel)
+      //    — executada na Fase 3, somente se o upsert da linha tiver sucesso.
       if (dedicatedConfig) {
         const updates: Record<string, unknown> = {};
         for (const field of dedicatedConfig.validSyncFields) {
@@ -251,25 +314,153 @@ export async function POST(request: NextRequest) {
         if (Object.keys(updates).length === 0) {
           // Nada preenchido para esta unidade — nada a replicar (não é falha)
         } else if (dedicatedRow && dedicatedRow.id) {
-          const { error: syncErr } = await supabase
-            .from(dedicatedConfig.table)
-            .update(updates)
-            .eq("id", String(dedicatedRow.id));
-          if (syncErr) {
-            results.sync_failed++;
-            syncDetails.push(
-              `Linha ${i + 1} (${unitName}): falha ao replicar para ${dedicatedConfig.table}: ${syncErr.message}`
-            );
-            console.error(`Erro ao sincronizar com ${dedicatedConfig.table}:`, syncErr.message);
-          } else {
-            results.sync_ok++;
-          }
+          dedicatedOpsByRowNo.set(item.rowNo, {
+            rowNo: item.rowNo,
+            unitName,
+            id: String(dedicatedRow.id),
+            payload: updates,
+          });
         } else {
-          results.sync_failed++;
-          syncDetails.push(
-            `Linha ${i + 1} (${unitName}): ${dedicatedMissReason ?? "unidade não encontrada na tabela dedicada"} (${dedicatedConfig.table}) — atualização não replicada ao espelho público`
+          dedicatedMissesByRowNo.set(
+            item.rowNo,
+            dedicatedMissReason ?? "unidade não encontrada na tabela dedicada"
           );
         }
+      }
+    }
+
+    // ─── FASE 2: Upsert em projeto_units em lotes ───────────────────────────
+    // Chaves duplicadas na própria planilha colapsam para a ÚLTIMA ocorrência
+    // (mesmo estado final do loop sequencial; contagem reporta as colapsadas).
+    const { unique, duplicatedRows } = dedupeUpsertPayloads(classified);
+    const succeededRowNos = new Set<number>();
+
+    for (const group of chunk(unique, UPSERT_CHUNK)) {
+      try {
+        const { error: upsertErr } = await supabase
+          .from("projeto_units")
+          .upsert(
+            group.map((item) => item.payload),
+            { onConflict: "empreendimento_id,bloco,unidade", count: "exact" }
+          );
+
+        if (!upsertErr) {
+          for (const item of group) {
+            if (item.kind === "updated") results.updated++;
+            else results.inserted++;
+            succeededRowNos.add(item.rowNo);
+          }
+          continue;
+        }
+
+        // Chunk falhou → fallback POR LINHA para atribuir a falha com precisão
+        // (preserva detalhes de erro por linha e não perde linhas boas do chunk).
+        console.error(
+          `Upsert em lote falhou (${group.length} linhas); refazendo por linha:`,
+          upsertErr.message
+        );
+        for (const item of group) {
+          const { error: rowErr } = await supabase
+            .from("projeto_units")
+            .upsert(item.payload, {
+              onConflict: "empreendimento_id,bloco,unidade",
+              count: "exact",
+            });
+          if (rowErr) {
+            results.errors++;
+            errorDetails.push(`Linha ${item.rowNo} (${item.unitName}): ${rowErr.message}`);
+            console.error(`Erro ao upsert linha ${item.rowNo}:`, rowErr.message);
+          } else {
+            if (item.kind === "updated") results.updated++;
+            else results.inserted++;
+            succeededRowNos.add(item.rowNo);
+          }
+        }
+      } catch (err) {
+        // Exceção de rede/SDK no chunk → mesmo fallback por linha
+        console.error("Exceção no upsert em lote; refazendo por linha:", err);
+        for (const item of group) {
+          try {
+            const { error: rowErr } = await supabase
+              .from("projeto_units")
+              .upsert(item.payload, {
+                onConflict: "empreendimento_id,bloco,unidade",
+                count: "exact",
+              });
+            if (rowErr) {
+              results.errors++;
+              errorDetails.push(`Linha ${item.rowNo} (${item.unitName}): ${rowErr.message}`);
+            } else {
+              if (item.kind === "updated") results.updated++;
+              else results.inserted++;
+              succeededRowNos.add(item.rowNo);
+            }
+          } catch (rowEx) {
+            results.errors++;
+            errorDetails.push(`Linha ${item.rowNo} (${item.unitName}): exceção ${String(rowEx)}`);
+          }
+        }
+      }
+    }
+
+    // ─── FASE 3: Replicação à tabela dedicada (espelho público) ────────────
+    // Somente linhas cujo upsert em projeto_units teve sucesso (mesma regra do
+    // fluxo sequencial: falha no upsert interrompia antes da replicação).
+    if (dedicatedConfig) {
+      const syncOps: DedicatedOp[] = [];
+      for (const item of classified) {
+        if (!succeededRowNos.has(item.rowNo)) continue;
+        const miss = dedicatedMissesByRowNo.get(item.rowNo);
+        if (miss) {
+          results.sync_failed++;
+          syncDetails.push(
+            `Linha ${item.rowNo} (${item.unitName}): ${miss} (${dedicatedConfig.table}) — atualização não replicada ao espelho público`
+          );
+          continue;
+        }
+        const op = dedicatedOpsByRowNo.get(item.rowNo);
+        if (op) syncOps.push(op);
+      }
+
+      // Agrupa payloads idênticos → .update().in(ids); grupos distintos rodam
+      // com concorrência controlada; falha de grupo refaz por id para atribuir
+      // falhas por unidade sem perder as demais.
+      const groups = groupDedicatedOps(syncOps);
+      const idChunks = groups.flatMap((g) =>
+        chunk(g.ops, DEDICATED_ID_CHUNK).map((part) => ({ group: g, ops: part }))
+      );
+
+      for (const batch of chunk(idChunks, DEDICATED_CONCURRENCY)) {
+        await Promise.all(
+          batch.map(async ({ group, ops }) => {
+            const ids = ops.map((op) => op.id);
+            try {
+              const { error: syncErr } = await supabase
+                .from(dedicatedConfig.table)
+                .update(group.payload)
+                .in("id", ids);
+              if (syncErr) {
+                await reprocessDedicatedIndividually(
+                  supabase,
+                  dedicatedConfig.table,
+                  ops,
+                  results,
+                  syncDetails
+                );
+              } else {
+                results.sync_ok += ops.length;
+              }
+            } catch {
+              await reprocessDedicatedIndividually(
+                supabase,
+                dedicatedConfig.table,
+                ops,
+                results,
+                syncDetails
+              );
+            }
+          })
+        );
       }
     }
 
@@ -285,6 +476,7 @@ export async function POST(request: NextRequest) {
       total_rows: rows.length,
       columns: columnMapping,
       partial_spreadsheet: isPartialSpreadsheet,
+      duplicated_rows_in_sheet: duplicatedRows,
       errors: errorDetails.length > 0 ? errorDetails : undefined,
       sync_details: syncDetails.length > 0 ? syncDetails : undefined,
     });

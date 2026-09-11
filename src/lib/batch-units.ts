@@ -30,16 +30,16 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { coordenadorHasAccess, isCoordenadorWithAnyEmpreendimento } from "@/lib/coordinator-access";
-import { trackUnitStatusChange } from "@/lib/analytics";
+import { trackUnitStatusChanges, type UnitStatusHistoryInsert } from "@/lib/analytics";
 
 export const BATCH_VALID_STATUSES = ["disponivel", "reservado", "vendido"] as const;
 export const BATCH_MAX_UNITS = 1000;
 
 // Tamanhos de chunk para manter as URLs do PostgREST (.in) abaixo de limites
 // práticos de gateway (ids UUID são longos; valores de unidade são curtos).
+// O histórico usa HISTORY_INSERT_CHUNK (src/lib/analytics.ts).
 const RESOLVE_CHUNK = 200;
 const UPDATE_CHUNK = 100;
-const ANALYTICS_CHUNK = 50;
 
 export type BatchUnitIdentifier = {
   unidade: string | number;
@@ -346,29 +346,26 @@ export async function applyBatchStatusUpdate(
     }
   }
 
-  // 6. Histórico por unidade (mesma granularidade do PATCH individual),
-  //    com statusAnterior capturado no passo 2. Await em chunks para garantir
-  //    o registro sem explodir o pool de conexões.
+  // 6. Histórico em LOTE (mesma granularidade do PATCH individual: uma linha
+  //    por unidade realmente atualizada, com statusAnterior capturado no passo
+  //    2). Inserts de arrays em chunks de 100 — para 500 unidades, 5 requisições
+  //    em vez de 500; aguardado sequencialmente (sem promessa órfã).
   const oldStatusById = new Map(rows.map((r) => [String(r.id), (r.status as string) ?? null]));
-  try {
-    for (const group of chunk(updated, ANALYTICS_CHUNK)) {
-      await Promise.all(
-        group.map((row) =>
-          trackUnitStatusChange({
-            unitId: String(row.id),
-            empreendimentoId: empreendimentoRef,
-            unidade: String(row.unidade ?? ""),
-            bloco: row.bloco === undefined || row.bloco === null ? "" : String(row.bloco),
-            statusAnterior: oldStatusById.get(String(row.id)) ?? null,
-            statusNovo: status,
-            changedBy,
-            changedByRole,
-          })
-        )
-      );
-    }
-  } catch {
-    // trackUnitStatusChange já engole erros internamente; nunca quebra a resposta.
+  const historyRows = updated.map<UnitStatusHistoryInsert>((row) => ({
+    unit_id: String(row.id),
+    empreendimento_id: empreendimentoRef,
+    unidade: String(row.unidade ?? ""),
+    bloco: row.bloco === undefined || row.bloco === null ? "" : String(row.bloco),
+    status_anterior: oldStatusById.get(String(row.id)) ?? null,
+    status_novo: status,
+    changed_by: changedBy,
+    changed_by_role: changedByRole,
+  }));
+  const historyResult = await trackUnitStatusChanges(historyRows);
+  if (historyResult.failedChunks > 0) {
+    console.error(
+      `[batch-units] Histórico: ${historyResult.failedChunks}/${historyResult.chunks} chunk(s) de histórico falharam (${historyResult.attempted} linha(s) tentadas).`
+    );
   }
 
   return { ok: true, result: { total: deduped.length, updated, failed: failures } };

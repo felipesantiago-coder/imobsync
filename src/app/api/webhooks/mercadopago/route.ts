@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { verifyWebhookSignature, getMpPayment, getMpSubscription, deleteMpPlan } from '@/lib/mercadopago';
+import { emailVariantsForQuery, resolveUniqueUserByEmail } from '@/lib/mp-user-resolution';
 
 /**
  * POST /api/webhooks/mercadopago
@@ -199,30 +200,35 @@ async function handlePaymentEvent(
     if (!userId) {
       const payerEmail = (paymentData.payer as Record<string, unknown> | undefined)?.email as string | undefined;
       if (payerEmail) {
-        // Buscar usuario pelo email no auth.users
+        // Associação INEQUÍVOCA por e-mail via profiles (espelho 1:1 de auth.users,
+        // mantido pelo trigger handle_new_user). O `listUsers({ filter })` do SDK
+        // não aplica o filtro em runtime — usava users[0] de uma página de 1,
+        // associando o pagamento a um usuário arbitrário. Agora: 1 match exato
+        // associa; ambiguidade NÃO associa (nunca escolher o primeiro).
         try {
-          const adminAuth = createAdminClient();
-          // ⚠︎ FINDING (performance program, Phase 0): the installed @supabase/auth-js
-          // listUsers() only sends page/per_page — the `filter` field is ignored at
-          // runtime. Behavior is preserved as-is pending owner validation with
-          // staging data; do NOT treat users[0] as guaranteed to match payerEmail.
-          const { data: { users } } = await adminAuth.auth.admin.listUsers({
-            page: 1,
-            perPage: 1,
-            filter: `email.eq.${payerEmail}`,
-          } as Parameters<typeof adminAuth.auth.admin.listUsers>[0] & { filter: string });
-          if (users && users.length > 0) {
-            userId = users[0].id;
+          const admin = createAdminClient();
+          const { data: matches } = await admin
+            .from("profiles")
+            .select("id, email")
+            .in("email", emailVariantsForQuery(payerEmail))
+            .limit(5);
+          const resolution = resolveUniqueUserByEmail(matches ?? [], payerEmail);
+          if (resolution.kind === "found") {
+            userId = resolution.userId;
             // Buscar assinatura pendente/ativa mais recente
             const { data: pendingAss } = await supabase
-              .from('assinaturas')
-              .select('id')
-              .eq('user_id', userId)
-              .in('status', ['pending', 'active'])
-              .order('created_at', { ascending: false })
+              .from("assinaturas")
+              .select("id")
+              .eq("user_id", userId)
+              .in("status", ["pending", "active"])
+              .order("created_at", { ascending: false })
               .limit(1)
               .maybeSingle();
             if (pendingAss) assinaturaId = pendingAss.id;
+          } else if (resolution.kind === "ambiguous") {
+            console.error(
+              `[Webhook MP] Pagamento ${paymentId}: e-mail do pagador corresponde a múltiplos usuários — pagamento NÃO associado (ambiguidade propositada).`
+            );
           }
         } catch {
           // Ignorar falha de busca
@@ -567,19 +573,28 @@ async function findLocalSubscription(
   // 2. Fallback: buscar por external_reference (planoId) + payer_email + status pending
   if (!externalReference || !payerEmail) return null;
 
-  // Buscar user_id pelo email no auth.users
+  // Buscar user_id por e-mail com associação INEQUÍVOCA via profiles
+  // (espelho 1:1 de auth.users). O `listUsers({ filter })` do SDK não aplica
+  // o filtro em runtime — não usar. Ambiguidade → não associa (retorna null).
   const admin = createAdminClient();
   let foundUserId: string | null = null;
 
   try {
-    const { data: { users } } = await admin.auth.admin.listUsers({
-      page: 1,
-      perPage: 1,
-      // ⚠︎ See note in processPaymentEvent: SDK ignores `filter` at runtime.
-      filter: `email.eq.${payerEmail}`,
-    } as Parameters<typeof admin.auth.admin.listUsers>[0] & { filter: string });
-    if (users && users.length > 0) {
-      foundUserId = users[0].id;
+    const { data: matches } = await admin
+      .from("profiles")
+      .select("id, email")
+      .in("email", emailVariantsForQuery(payerEmail))
+      .limit(5);
+    const resolution = resolveUniqueUserByEmail(matches ?? [], payerEmail);
+    if (resolution.kind === "found") {
+      foundUserId = resolution.userId;
+    } else {
+      if (resolution.kind === "ambiguous") {
+        console.error(
+          `[Webhook MP] findLocalSubscription: e-mail do pagador corresponde a múltiplos usuários — assinatura NÃO resolvida (ambiguidade propositada).`
+        );
+      }
+      return null;
     }
   } catch {
     return null;
