@@ -11,6 +11,13 @@
  * Autorização: o proprietário autorizou a execução APÓS o inventário (2026-09-11).
  * Este script nunca inventa dados: sem VERCEL_TOKEN, apenas selftest/--help funcionam.
  *
+ * ALIASES (semântica revisada na execução de 11/09/2026): apenas aliases REAIS
+ * (custom/compartilhados) protegem. O alias automático de git
+ * (*-git-<branch>-<hash>-*.vercel.app) é exclusivo de cada deployment e morre com ele —
+ * todo preview nasce com um, então protegê-lo tornaria a política de previews inoperante.
+ * A listagem v6 NÃO expõe aliases; o GET v13 sim — por isso o `inventory` enriquece
+ * cada item com GET individual, para que dry-run e execute julguem com os mesmos dados.
+ *
  * Uso:
  *   VERCEL_TOKEN=xxx node scripts/vercel-retention.mjs inventory [--team ID] [--project ID_OU_NOME] [--days 90] [--out retention/]
  *   VERCEL_TOKEN=xxx node scripts/vercel-retention.mjs dry-run [--input retention/inventory-<ts>.json] [--out retention/]
@@ -40,6 +47,29 @@ export const POLICY = {
 const DAY_MS = 86_400_000;
 const HOUR_MS = 3_600_000;
 
+// Fallback quando a resposta não traz `automaticAliases`: padrão do alias automático
+// de git (ex.: imobsync-git-perf-opt-7dc39d-felipe-santiagos-projects-8ef42ff7.vercel.app).
+const GIT_AUTO_ALIAS_RE = /-git-[^.]*\.vercel\.app$/i;
+
+/**
+ * Aliases REAIS (proteção): tudo em `alias` EXCETO os automáticos (listados em
+ * `automaticAliases` ou no padrão de git acima). Retorna array (nunca null).
+ */
+export function meaningfulAliases(deployment) {
+  if (!deployment) return [];
+  const raw = Array.isArray(deployment.alias)
+    ? deployment.alias.filter(Boolean)
+    : deployment.alias
+      ? [String(deployment.alias)]
+      : [];
+  const auto = new Set(
+    (Array.isArray(deployment.automaticAliases) ? deployment.automaticAliases : [])
+      .filter(Boolean)
+      .map(String),
+  );
+  return raw.filter((a) => !auto.has(a) && !GIT_AUTO_ALIAS_RE.test(a));
+}
+
 /** Classificador puro. Recebe lista bruta (qualquer ordem) e retorna decisões. */
 export function classifyDeployments(deployments, { now = Date.now() } = {}) {
   const sorted = [...deployments].sort((a, b) => b.created - a.created);
@@ -57,6 +87,7 @@ export function classifyDeployments(deployments, { now = Date.now() } = {}) {
         ? [String(d.alias)]
         : [];
     const meta = d.meta || {};
+    const customAliases = meaningfulAliases(d);
     const base = {
       id: d.uid || d.id,
       url: d.url,
@@ -65,6 +96,7 @@ export function classifyDeployments(deployments, { now = Date.now() } = {}) {
       created: new Date(d.created).toISOString(),
       ageDays: Math.round(ageDays * 10) / 10,
       aliases,
+      customAliases,
       commit: meta.githubCommitSha || meta.gitlabCommitSha || null,
       branch: meta.githubCommitRef || meta.gitlabCommitRef || meta.gitCommitRef || null,
       source: meta.githubDeployment || meta.gitlabDeployment || d.source || null,
@@ -80,12 +112,13 @@ export function classifyDeployments(deployments, { now = Date.now() } = {}) {
       decisions.push({ ...base, action: "keep", reason: `<24h (proteção)` });
       continue;
     }
-    // 3) Com alias/domínio anexado: listar para decisão caso a caso (plano §3).
-    if (aliases.length > 0) {
+    // 3) Com alias REAL (custom/compartilhado): decisão caso a caso (plano §3).
+    //    O alias automático de git NÃO protege — ver meaningfulAliases().
+    if (customAliases.length > 0) {
       decisions.push({
         ...base,
         action: "keep",
-        reason: "possui alias — decidir caso a caso",
+        reason: "possui alias real — decidir caso a caso",
       });
       continue;
     }
@@ -219,6 +252,53 @@ function ensureOutDir(out) {
   return out;
 }
 
+/**
+ * Enriquece cada deployment com alias/automaticAliases/target via GET v13 individual
+ * (concorrência limitada). A listagem v6 NÃO expõe aliases — sem este passo, o dry-run
+ * julga sem os mesmos dados que o execute usa na re-checagem (falso positivo/negativo).
+ * Falha por item é tolerada (item segue sem enriquecimento, com automaticAliases: []).
+ */
+async function enrichWithAliases(deployments, token, teamId) {
+  if (deployments.length === 0) return deployments;
+  const q = teamId ? `?teamId=${teamId}` : "";
+  const out = new Array(deployments.length);
+  const CONCURRENCY = 5;
+  let idx = 0;
+  let done = 0;
+  async function worker() {
+    while (idx < deployments.length) {
+      const i = idx++;
+      const d = deployments[i];
+      try {
+        const res = await apiFetch(`/v13/deployments/${d.uid}${q}`, token);
+        if (res.ok) {
+          const full = await res.json();
+          out[i] = {
+            ...d,
+            target: full.target ?? d.target ?? null,
+            state: full.readyState || d.state || d.readyState || "UNKNOWN",
+            alias: Array.isArray(full.alias) ? full.alias : [],
+            automaticAliases: Array.isArray(full.automaticAliases) ? full.automaticAliases : [],
+          };
+        } else {
+          out[i] = { ...d, alias: Array.isArray(d.alias) ? d.alias : [], automaticAliases: [] };
+        }
+      } catch {
+        out[i] = { ...d, alias: Array.isArray(d.alias) ? d.alias : [], automaticAliases: [] };
+      }
+      done += 1;
+      if (done % 50 === 0) console.log(`  enriquecido ${done}/${deployments.length}...`);
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(CONCURRENCY, deployments.length) }, () => worker()),
+  );
+  console.log(
+    `Aliases enriquecidos em ${deployments.length} deployments (GET v13 individual, concorrência ${CONCURRENCY}).`,
+  );
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // Comandos
 // ---------------------------------------------------------------------------
@@ -239,7 +319,11 @@ async function cmdInventory(args) {
       projectId ? " (escopo: projeto)" : " (escopo: conta/team inteira — confirme antes de decidir)"
     }...`,
   );
-  const raw = await collectDeployments(token, { teamId, projectId, days });
+  const raw = await enrichWithAliases(
+    await collectDeployments(token, { teamId, projectId, days }),
+    token,
+    teamId,
+  );
   const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
   const jsonPath = path.join(outDir, `inventory-${ts}.json`);
   writeFileSync(
@@ -251,6 +335,7 @@ async function cmdInventory(args) {
         days,
         teamId,
         projectId,
+        enriched: true,
         count: raw.length,
         deployments: raw,
       },
@@ -355,8 +440,8 @@ async function cmdExecute(args) {
     die("A lista não foi gerada pelo dry-run desta ferramenta — abortando por segurança.");
   }
   const items = list.items || [];
-  if (items.some((d) => d.action !== "delete" || (d.aliases && d.aliases.length > 0))) {
-    die("A lista contém itens protegidos (alias/keep) — regere a lista com dry-run.");
+  if (items.some((d) => d.action !== "delete" || (d.customAliases && d.customAliases.length > 0))) {
+    die("A lista contém itens protegidos (alias real/keep) — regere a lista com dry-run.");
   }
   const teamQ = args.team || process.env.VERCEL_TEAM_ID;
   const batchSize = Number(args.batch || POLICY.EXECUTE_BATCH);
@@ -380,10 +465,12 @@ async function cmdExecute(args) {
       }
       if (check.ok) {
         const cur = await check.json();
-        const hasAlias = Array.isArray(cur.alias) && cur.alias.length > 0;
-        if (hasAlias || cur.target === "production") {
+        const custom = meaningfulAliases(cur);
+        if (custom.length > 0 || cur.target === "production") {
           failed += 1;
-          console.log(`  [PULADO — ganhou alias/produção desde o dry-run] ${d.id}`);
+          console.log(
+            `  [PULADO — alias real (${custom.join(", ")}) ou produção na re-checagem] ${d.id}`,
+          );
           continue;
         }
       }
@@ -415,6 +502,7 @@ function cmdSelftest() {
     target: over.target,
     created: now - over.ageDays * DAY_MS,
     alias: over.alias || [],
+    automaticAliases: over.automaticAliases || [],
     meta: over.meta || {},
   });
   const fixture = [
@@ -427,6 +515,16 @@ function cmdSelftest() {
     mk({ uid: "prev-1h", state: "READY", target: "preview", ageDays: 0.2 }),
     mk({ uid: "prev-3d", state: "READY", target: "preview", ageDays: 3 }),
     mk({ uid: "prev-10d", state: "READY", target: "preview", ageDays: 10 }),
+    mk({
+      uid: "prev-10d-auto",
+      state: "READY",
+      target: "preview",
+      ageDays: 10,
+      alias: ["imobsync-git-perf-opt-7dc39d-felipe-santiagos-projects-8ef42ff7.vercel.app"],
+      automaticAliases: ["imobsync-git-perf-opt-7dc39d-felipe-santiagos-projects-8ef42ff7.vercel.app"],
+    }),
+    mk({ uid: "prev-12d-autoregex", state: "READY", target: "preview", ageDays: 12, alias: ["imobsync-git-fix-abc-user.vercel.app"] }),
+    mk({ uid: "prev-10d-custom", state: "READY", target: "preview", ageDays: 10, alias: ["staging.imobsync.com"] }),
     mk({ uid: "canc-1d", state: "CANCELED", target: "preview", ageDays: 1 }),
     mk({ uid: "canc-5d", state: "CANCELED", target: "preview", ageDays: 5 }),
     mk({ uid: "err-10d", state: "ERROR", target: "preview", ageDays: 10 }),
@@ -442,10 +540,11 @@ function cmdSelftest() {
     "prod-90d-alias",
     "prev-1h",
     "prev-3d",
+    "prev-10d-custom",
     "canc-1d",
     "build",
   ];
-  const expectDelete = ["prod-60d", "prev-10d", "canc-5d", "err-10d"];
+  const expectDelete = ["prod-60d", "prev-10d", "prev-10d-auto", "prev-12d-autoregex", "canc-5d", "err-10d"];
   let failed = 0;
   for (const id of expectKeep) {
     if (byId[id]?.action !== "keep") {
@@ -460,8 +559,8 @@ function cmdSelftest() {
     }
   }
   const delList = decisions.filter((d) => d.action === "delete");
-  if (delList.some((d) => d.aliases.length > 0)) {
-    console.error("  FALHA: lista de exclusão contém item com alias");
+  if (delList.some((d) => d.customAliases.length > 0)) {
+    console.error("  FALHA: lista de exclusão contém item com alias real");
     failed += 1;
   }
   if (failed > 0) {
@@ -523,8 +622,8 @@ Comandos:
   execute     Exclui SOMENTE ids da lista do dry-run. [--list to-delete.json] --yes [--batch 10]
   selftest    Valida o classificador offline (sem token).
 
-Política (plano §3): produção ativa/alias nunca; 3 últimas produções READY; produção >30d, preview >7d,
-canceled/error >2d elegíveis; nada com <24h; itens com alias ficam fora da lista automática.`);
+Política (plano §3): produção ativa/alias real nunca; 3 últimas produções READY; produção >30d, preview >7d,
+canceled/error >2d elegíveis; nada com <24h; alias automático de git não protege (ver meaningfulAliases).`);
       process.exit(command ? 1 : 0);
   }
 }

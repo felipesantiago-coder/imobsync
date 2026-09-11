@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 // Importa o classificador puro do script de retenção (.mjs — allowJs + noImplicitAny off no tsconfig).
-import { classifyDeployments, POLICY } from "../scripts/vercel-retention.mjs";
+import { classifyDeployments, meaningfulAliases, POLICY } from "../scripts/vercel-retention.mjs";
 
 type Over = {
   uid: string;
@@ -8,12 +8,14 @@ type Over = {
   target: "production" | "preview";
   ageDays: number;
   alias?: string[];
+  automaticAliases?: string[];
 };
 type Decision = {
   id: string;
   action: "keep" | "delete";
   reason: string;
   aliases: string[];
+  customAliases: string[];
 };
 
 function fixture(overs: Over[], now: number): Map<string, Decision> {
@@ -24,6 +26,7 @@ function fixture(overs: Over[], now: number): Map<string, Decision> {
     target: o.target,
     created: now - o.ageDays * 86_400_000,
     alias: o.alias ?? [],
+    automaticAliases: o.automaticAliases ?? [],
     meta: {},
   }));
   const decisions = classifyDeployments(deps, { now }) as Decision[];
@@ -40,6 +43,35 @@ describe("classificador da política de retenção (plano §3)", () => {
     );
     expect(m.get("p")!.action).toBe("keep");
     expect(m.get("p")!.reason).toMatch(/alias/);
+  });
+
+  it("alias automático de git NÃO protege preview >7d (todo preview nasce com um)", () => {
+    const auto = "imobsync-git-perf-opt-7dc39d-felipe-santiagos-projects-8ef42ff7.vercel.app";
+    const m = fixture(
+      [
+        { uid: "auto-set", state: "READY", target: "preview", ageDays: 10, alias: [auto], automaticAliases: [auto] },
+        { uid: "auto-regex", state: "READY", target: "preview", ageDays: 12, alias: ["imobsync-git-fix-abc-user.vercel.app"] },
+        { uid: "custom", state: "READY", target: "preview", ageDays: 10, alias: ["staging.imobsync.com"] },
+      ],
+      NOW,
+    );
+    expect(m.get("auto-set")!.action).toBe("delete");
+    expect(m.get("auto-regex")!.action).toBe("delete");
+    expect(m.get("custom")!.action).toBe("keep");
+    expect(m.get("custom")!.reason).toMatch(/alias/);
+  });
+
+  it("meaningfulAliases separa aliases reais dos automáticos", () => {
+    const auto = "imobsync-git-main-abc123-user.vercel.app";
+    expect(
+      meaningfulAliases({
+        alias: [auto, "staging.imobsync.com", "imobsync.vercel.app"],
+        automaticAliases: [auto],
+      }),
+    ).toEqual(["staging.imobsync.com", "imobsync.vercel.app"]);
+    expect(meaningfulAliases({ alias: [auto] })).toEqual([]);
+    expect(meaningfulAliases({})).toEqual([]);
+    expect(meaningfulAliases(null)).toEqual([]);
   });
 
   it("preserva as 3 últimas produções READY como janela de rollback", () => {

@@ -1,7 +1,7 @@
 # ImobSync — Plano operacional de retenção de deployments (dry-run)
 
 Data: 11/09/2026 • Complemento de: `VERCEL-OPTIMIZATION-REPORT-2026-09-11.md`
-**Status (11/09/2026): o proprietário AUTORIZOU a execução deste plano após o inventário.** Nenhuma ação foi executada ainda porque o inventário exige credenciais da plataforma (VERCEL_TOKEN). A ferramenta `scripts/vercel-retention.mjs` (§6) já implementa o fluxo completo com travas de segurança; a exclusão só acontece com a lista do dry-run revisada + `--yes`.
+**Status (11/09/2026): EXECUTADO.** O proprietário autorizou a execução após o inventário e forneceu o VERCEL_TOKEN na mesma data; o fluxo completo (inventário → dry-run → revisão → execute) rodou com as travas abaixo — log completo em §7. Próximo passo passivo: acompanhar Usage → Deployment/Functions Storage em 24–48 h.
 
 ---
 
@@ -40,7 +40,9 @@ Checagens de gatilhos duplicados:
 | Previews (pr/branch) | Manter **7 dias** | Revisão de PRs ativos |
 | Previews com comentário/revisão pendente | Exceção: manter até fechamento | Fluxo de review |
 | Canceled/failed | Manter **2 dias** | Diagnóstico curto |
-| Deployments com alias legado (URLs compartilhadas) | Listar e decidir caso a caso | Não quebrar links |
+| Deployments com alias real (URLs compartilhadas/custom) | Listar e decidir caso a caso | Não quebrar links |
+
+Nota de semântica (11/09/2026, pós-inventário): o **alias automático de git** (`*-git-<branch>-<hash>-*.vercel.app`) não é "alias legado" — é exclusivo de cada deployment, nasce e morre com ele, e todo preview recebe um. Ele **não protege** (verificado na API: consta em `automaticAliases`). A decisão caso a caso vale para aliases reais — custom/compartilhados, ex.: `fluxo-quadra.vercel.app` herdado do rename do projeto.
 
 Exceções e limites declarados: a retenção da Vercel tem comportamento próprio (deployments recentes e com alias são protegidos; exclusão pode ser assíncrona); encurtar retenção não reduz necessariamente o Storage já faturado no ciclo corrente.
 
@@ -61,13 +63,14 @@ Exceções e limites declarados: a retenção da Vercel tem comportamento própr
 
 ## 6. Execução autorizada — ferramenta implementada (11/09/2026)
 
-O plano está implementado em `scripts/vercel-retention.mjs` (sem dependências; Node ≥ 18). O classificador da política §3 é puro e coberto por testes (`tests/retention-policy.test.ts`, 9 casos) e por um `selftest` embutido.
+O plano está implementado em `scripts/vercel-retention.mjs` (sem dependências; Node ≥ 18). O classificador da política §3 é puro e coberto por testes (`tests/retention-policy.test.ts`, 11 casos) e por um `selftest` embutido.
 
 Travas de segurança implementadas:
 
 - `dry-run` **nunca exclui**; gera `retention/to-delete-<ts>.json` com motivo por deployment.
-- `execute` só aceita a lista gerada pelo próprio dry-run (marca `generatedBy`), exige `--yes`, re-checa cada deployment antes de excluir (ganhou alias / virou produção → pulado), e opera em lotes de 10 com pausa de 2 s.
-- Itens com alias/domínio anexado jamais entram na lista automática (ficam como `keep — decidir caso a caso`).
+- `execute` só aceita a lista gerada pelo próprio dry-run (marca `generatedBy`), exige `--yes`, re-checa cada deployment antes de excluir (alias real / virou produção → pulado), e opera em lotes de 10 com pausa de 2 s.
+- Itens com alias REAL (custom/compartilhado) jamais entram na lista automática (ficam como `keep — decidir caso a caso`); o alias automático de git não protege (`meaningfulAliases()`).
+- A listagem v6 da API NÃO expõe aliases; o `inventory` enriquece cada deployment com GET v13 individual (concorrência 5) para que dry-run e execute julguem com os mesmos dados — sem isso a re-checagem do `execute` pula itens que o dry-run marcou (falso positivo observado na 1ª execução, §7).
 - Nada com menos de 24 h é elegível; builds em andamento nunca; produção ativa e as 3 últimas produções READY sempre preservadas.
 
 Procedimento (requer token granular com escopo Deployments: Read/Write):
@@ -77,7 +80,7 @@ Procedimento (requer token granular com escopo Deployments: Read/Write):
 node scripts/vercel-retention.mjs selftest
 
 # 1) Inventário (somente leitura, últimos 90 dias):
-VERCEL_TOKEN=xxx node scripts/vercel-retention.mjs inventory --project quadra-imob-sync [--team TEAM_ID] [--days 90]
+VERCEL_TOKEN=xxx node scripts/vercel-retention.mjs inventory --project imobsync [--team TEAM_ID] [--days 90]
 
 # 2) Dry-run — aplicar a política e gerar a lista:
 VERCEL_TOKEN=xxx node scripts/vercel-retention.mjs dry-run --input retention/inventory-<ts>.json
@@ -91,3 +94,23 @@ VERCEL_TOKEN=xxx node scripts/vercel-retention.mjs execute --list retention/to-d
 Se a listagem for feita sem `--project`, o escopo é a conta/team inteira — a captura original do proprietário pode somar mais de um projeto; confirme o escopo antes de decidir. A exclusão é assíncrona na Vercel e **não recupera GB-mês já contabilizado** no ciclo corrente; o efeito aparece na curva dos dias seguintes.
 
 Limitação honesta: a API não expõe o tamanho por deployment, então a estimativa da redução (§4 passo 3) continua dependendo do painel (Usage → Deployment Storage).
+
+## 7. Log de execução (11/09/2026)
+
+Token granular fornecido pelo proprietário na data; conta pessoal (sem teams), projeto `imobsync` (`prj_ll2fsinWSxuF7Mo5vK27iDYtheNR`). Inventário dos últimos 90 dias: **200 deployments**.
+
+| Etapa | Resultado |
+|---|---|
+| selftest | OK (classificador íntegro) |
+| inventory 1º (v6, sem enriquecimento) | 200 deployments |
+| dry-run 1º | 5 elegíveis (previews >7d); 186 prod <30d; 6 <24h; 3 rollback |
+| execute 1º | **0 excluídos — 5 PULADOS** pela re-checagem: os previews têm alias automático de git (visível só no GET v13, ausente na listagem v6) → falso positivo de "ganhou alias". Travas funcionaram como projetado (falha segura) |
+| Refinamento | `meaningfulAliases()` (alias real = `alias` − `automaticAliases` − padrão `*-git-*`); `inventory` enriquecido por GET v13 individual; selftest ampliado; +2 testes (11 casos); gates verdes (tsc, vitest 136/136, eslint 0/0, build) |
+| inventory 2º (enriquecido) | 200 deployments; produções retêm alias real (ex.: `fluxo-quadra.vercel.app`, legado do rename do projeto) → preservadas |
+| dry-run 2º | 5 elegíveis (mesmos previews: branch antiga `perf/optimization-program`, ~7,4 d, único alias = automático de git, confirmado em `automaticAliases`); 188 alias real; 6 <24h; 1 rollback |
+| execute 2º | **5 excluídos, 0 falhas, 0 pulados** |
+| Pós-execução | 200 → **195** deployments (90d); produção READY servindo `52b4431` (HEAD da main pós-merge) — item do checklist §8 do relatório de deps confirmado via API |
+
+Efeito no Storage: assíncrono — acompanhar Usage → Deployment/Functions Storage nas próximas 24–48 h. Os 5 previews excluídos eram da branch antiga `perf/optimization-program` e são recriáveis a qualquer momento a partir do git; nenhuma produção, alias real ou item da janela de rollback foi tocado.
+
+Descoberta registrada para execuções futuras: as produções retêm, como alias REAL, tanto a URL única de produção quanto aliases do nome antigo do projeto (`fluxo-quadra.*`). Com isso, a regra "produção >30d elegível" só se aplicaria a produções sem nenhum alias real — hoje todas têm, então a limpeza de produções antigas será sempre "caso a caso" (comportamento conservador, alinhado ao §3).
