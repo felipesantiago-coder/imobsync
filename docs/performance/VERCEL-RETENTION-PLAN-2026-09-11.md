@@ -1,7 +1,7 @@
 # ImobSync — Plano operacional de retenção de deployments (dry-run)
 
 Data: 11/09/2026 • Complemento de: `VERCEL-OPTIMIZATION-REPORT-2026-09-11.md`
-**Nenhuma ação deste plano foi executada.** Alterar retenção ou excluir deployments exige lista concreta, revisão e autorização do proprietário (regra 9 do prompt).
+**Status (11/09/2026): o proprietário AUTORIZOU a execução deste plano após o inventário.** Nenhuma ação foi executada ainda porque o inventário exige credenciais da plataforma (VERCEL_TOKEN). A ferramenta `scripts/vercel-retention.mjs` (§6) já implementa o fluxo completo com travas de segurança; a exclusão só acontece com a lista do dry-run revisada + `--yes`.
 
 ---
 
@@ -58,3 +58,36 @@ Exceções e limites declarados: a retenção da Vercel tem comportamento própr
 - Histórico de rollback encurta para a janela definida.
 - Nenhum efeito sobre dados, RLS, funções ativas, domínios com alias ou usuários.
 - Nenhum job externo é criado ou alterado neste plano (o cron de usage já existe no cron-job.org; não duplicar agendamentos).
+
+## 6. Execução autorizada — ferramenta implementada (11/09/2026)
+
+O plano está implementado em `scripts/vercel-retention.mjs` (sem dependências; Node ≥ 18). O classificador da política §3 é puro e coberto por testes (`tests/retention-policy.test.ts`, 9 casos) e por um `selftest` embutido.
+
+Travas de segurança implementadas:
+
+- `dry-run` **nunca exclui**; gera `retention/to-delete-<ts>.json` com motivo por deployment.
+- `execute` só aceita a lista gerada pelo próprio dry-run (marca `generatedBy`), exige `--yes`, re-checa cada deployment antes de excluir (ganhou alias / virou produção → pulado), e opera em lotes de 10 com pausa de 2 s.
+- Itens com alias/domínio anexado jamais entram na lista automática (ficam como `keep — decidir caso a caso`).
+- Nada com menos de 24 h é elegível; builds em andamento nunca; produção ativa e as 3 últimas produções READY sempre preservadas.
+
+Procedimento (requer token granular com escopo Deployments: Read/Write):
+
+```bash
+# 0) Validação offline da política (não usa rede):
+node scripts/vercel-retention.mjs selftest
+
+# 1) Inventário (somente leitura, últimos 90 dias):
+VERCEL_TOKEN=xxx node scripts/vercel-retention.mjs inventory --project quadra-imob-sync [--team TEAM_ID] [--days 90]
+
+# 2) Dry-run — aplicar a política e gerar a lista:
+VERCEL_TOKEN=xxx node scripts/vercel-retention.mjs dry-run --input retention/inventory-<ts>.json
+
+# 3) Revisar a lista (§4 passos 2–4) e, só então, executar em lotes:
+VERCEL_TOKEN=xxx node scripts/vercel-retention.mjs execute --list retention/to-delete-<ts>.json --yes
+
+# 4) Conferir Usage → Deployment Storage em 24–48 h antes de eventual novo lote.
+```
+
+Se a listagem for feita sem `--project`, o escopo é a conta/team inteira — a captura original do proprietário pode somar mais de um projeto; confirme o escopo antes de decidir. A exclusão é assíncrona na Vercel e **não recupera GB-mês já contabilizado** no ciclo corrente; o efeito aparece na curva dos dias seguintes.
+
+Limitação honesta: a API não expõe o tamanho por deployment, então a estimativa da redução (§4 passo 3) continua dependendo do painel (Usage → Deployment Storage).
