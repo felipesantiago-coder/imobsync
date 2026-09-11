@@ -106,25 +106,69 @@ export function mapColumns(
 export const TOTAL_KNOWN_FIELDS = 12;
 
 // ─── Parsers de valores ────────────────────────────────────────────────────────
+/**
+ * Converte um valor numérico de planilha em número, tolerando os formatos e
+ * ruídos de exportação mais comuns:
+ *
+ *   "1.234.567,89" → 1234567.89    "R$ 350.000,00" → 350000
+ *   "R$ 350.000"   → 350000        "350.000"       → 350000 (milhar)
+ *   "1.50"         → 1.5           "0,90"          → 0.9
+ *   "1,234.56"     → 1234.56 (US)  "1,234,567"     → 1234567
+ *   "123,45 m²"    → 123.45        "(50)" / "-50"  → 50
+ *
+ * Heurística para separador único ambíguo: grupo final com exatamente 3
+ * dígitos e parte inteira ≠ 0 → milhar ("1.500" → 1500, não 1.5 — preço de
+ * unidade nunca é 1,50); caso contrário → decimal.
+ *
+ * Retorna null para vazio, não numérico ou lixo — o chamador DEVE ignorar o
+ * campo e reportar aviso (nunca aplicar valor errado nem pular em silêncio).
+ */
 export function parseBrazilianNumber(value: unknown): number | null {
-  if (value === null || value === undefined || value === "") return null;
-  const str = String(value).trim();
-  if (str === "") return null;
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  let s = String(value).trim();
+  if (s === "") return null;
 
-  // Formato brasileiro: 1.234.567,89
-  if (str.includes(",") && str.includes(".")) {
-    const cleaned = str.replace(/\./g, "").replace(",", ".");
-    const num = parseFloat(cleaned);
-    return isNaN(num) ? null : num;
-  }
-  if (str.includes(",")) {
-    const cleaned = str.replace(",", ".");
-    const num = parseFloat(cleaned);
-    return isNaN(num) ? null : num;
+  // Remove símbolos de moeda, unidades, espaços (inclusive non-breaking) e sinais
+  s = s
+    .replace(/\u00a0/g, " ")
+    .replace(/(r\$|us\$|usd|\$|€|£)/gi, "")
+    .replace(/m²|m2/gi, "")
+    .replace(/\s+/g, "")
+    .replace(/^[+()]+|[()]+$/g, "")
+    .replace(/^-+|-+$/g, "");
+  if (s === "" || !/^[\d.,]+$/.test(s)) return null;
+  if (/\.\.|,,|\.,|,\./.test(s)) return null; // separadores adjacentes → lixo
+
+  const hasComma = s.includes(",");
+  const hasDot = s.includes(".");
+  const singleGroupValue = (intPart: string, fracPart: string): string =>
+    fracPart.length === 3 && intPart.replace(/^0+/, "").length > 0
+      ? intPart + fracPart // milhar: "1.500" → 1500
+      : `${intPart}.${fracPart}`; // decimal: "1.50" → 1.5
+
+  if (hasComma && hasDot) {
+    // O ÚLTIMO separador é o decimal; os demais são milhar — cobre BR
+    // ("1.234.567,89") e US ("1,234.56").
+    if (s.lastIndexOf(".") > s.lastIndexOf(",")) {
+      s = s.replace(/,/g, ""); // "1,234.56" → "1234.56"
+    } else {
+      s = s.replace(/\./g, "").replace(",", "."); // "1.234.567,89" → "1234567.89"
+    }
+  } else if (hasComma) {
+    const parts = s.split(",");
+    if (parts.length > 2) s = parts.join(""); // "1,234,567" (US milhar)
+    else s = singleGroupValue(parts[0], parts[1]);
+  } else if (hasDot) {
+    const parts = s.split(".");
+    if (parts.length > 2) s = parts.join(""); // "1.234.567" (BR milhar)
+    else s = singleGroupValue(parts[0], parts[1]);
   }
 
-  const num = parseFloat(str);
-  return isNaN(num) ? null : num;
+  if ((s.match(/\./g) || []).length > 1) return null; // sobrou >1 decimal → lixo
+
+  const num = parseFloat(s);
+  return isNaN(num) || !Number.isFinite(num) ? null : num;
 }
 
 export function parseBoolean(value: unknown): boolean {
@@ -221,6 +265,43 @@ export function buildPartialUnitFromRow(
 //   - bloco: trim + lowercase + remove a palavra "bloco"/"torre" e separadores
 //     ("Bloco 1" === "1" === "bloco-1") — divergência de formatação entre
 //     planilhas e banco não deve criar unidades duplicadas.
+/**
+ * Avisos de linha: células PRESENTES e preenchidas que NÃO viraram campo —
+ * p.ex. valor de venda não convertível ("consultar"), status desconhecido
+ * ("em negociação"). O chamador reporta cada aviso (skip com aviso), nunca
+ * silêncio — é o que permite diagnosticar planilhas com formatação nova.
+ */
+export function collectRowWarnings(
+  row: Record<string, unknown>,
+  columnMapping: Record<string, string>,
+  partial: ExcelRow
+): string[] {
+  const warnings: string[] = [];
+  for (const [header, dbField] of Object.entries(columnMapping)) {
+    const raw = row[header];
+    const rawText = raw === null || raw === undefined ? "" : String(raw).trim();
+    if (rawText === "") continue;
+    if (partial[dbField] !== undefined) continue; // campo convertido com sucesso
+
+    if (
+      dbField === "valor_venda" ||
+      dbField === "area" ||
+      dbField === "andar" ||
+      dbField === "quartos" ||
+      dbField === "vagas"
+    ) {
+      warnings.push(
+        `coluna "${header}": valor "${rawText}" não foi convertido para número — campo ignorado (valor antigo preservado)`
+      );
+    } else if (dbField === "status") {
+      warnings.push(
+        `coluna "${header}": status "${rawText}" não reconhecido (use disponível/reservada/vendida) — campo ignorado`
+      );
+    }
+  }
+  return warnings;
+}
+
 export function normalizeUnitText(v: unknown): string {
   return String(v ?? "").trim().toLowerCase();
 }

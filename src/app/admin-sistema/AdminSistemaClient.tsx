@@ -545,9 +545,13 @@ export default function AdminSistemaClient() {
         if (json.skipped) parts.push(`${json.skipped} ignoradas`);
         const errCount = Array.isArray(json.errors) ? json.errors.length : 0;
         const syncFailed = json.sync_failed || 0;
+        const warnCount = Array.isArray(json.warnings) ? json.warnings.length : 0;
+        const unmapped: string[] = Array.isArray(json.unmapped_columns) ? json.unmapped_columns : [];
         if (errCount) parts.push(`${errCount} com erro`);
+        if (warnCount) parts.push(`${warnCount} valor${warnCount > 1 ? "es" : ""} ignorado${warnCount > 1 ? "s" : ""} com aviso`);
         if (syncFailed) parts.push(`${syncFailed} não replicada${syncFailed > 1 ? "s" : ""} ao espelho público`);
-        const toastType = errCount > 0 || syncFailed > 0 ? "warning" : "success";
+        if (unmapped.length) parts.push(`colunas não reconhecidas: ${unmapped.slice(0, 3).join(", ")}${unmapped.length > 3 ? "…" : ""}`);
+        const toastType = errCount > 0 || syncFailed > 0 || warnCount > 0 ? "warning" : "success";
         addToast(toastType, `Excel: ${parts.join(", ") || "nenhuma alteração"} — ${json.total_units} unidades totais`);
         // Refresh to update unit counts
         fetchEmpreendimentos();

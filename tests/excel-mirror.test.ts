@@ -14,6 +14,7 @@ import { describe, it, expect } from "vitest";
 import {
   buildPartialUnitFromRow,
   buildUnitIndex,
+  collectRowWarnings,
   composeUnitToSave,
   findExistingUnit,
   mapColumns,
@@ -39,6 +40,62 @@ describe("parseBrazilianNumber", () => {
   });
   it("retorna null para texto não numérico", () => {
     expect(parseBrazilianNumber("consulte")).toBeNull();
+  });
+  it("converte moeda e milhares (planilha real com formatação)", () => {
+    expect(parseBrazilianNumber("R$ 1.234.567,89")).toBe(1234567.89);
+    expect(parseBrazilianNumber("R$ 350.000,00")).toBe(350000);
+    expect(parseBrazilianNumber("R$ 350.000")).toBe(350000);
+    expect(parseBrazilianNumber("R$350000")).toBe(350000);
+    expect(parseBrazilianNumber("US$ 2.500")).toBe(2500);
+    expect(parseBrazilianNumber("350.000,00")).toBe(350000);
+    expect(parseBrazilianNumber("1.234.567")).toBe(1234567);
+    expect(parseBrazilianNumber("1,234,567")).toBe(1234567);
+    expect(parseBrazilianNumber("123,45 m²")).toBe(123.45);
+    expect(parseBrazilianNumber(350000)).toBe(350000);
+  });
+  it("grupo final de 3 dígitos é milhar; decimais curtos permanecem decimais", () => {
+    expect(parseBrazilianNumber("1.500")).toBe(1500); // preço de unidade nunca é 1,50
+    expect(parseBrazilianNumber("350,000")).toBe(350000);
+    expect(parseBrazilianNumber("0.500")).toBe(0.5); // parte inteira 0 → decimal
+    expect(parseBrazilianNumber("0,90")).toBe(0.9);
+    expect(parseBrazilianNumber("1.50")).toBe(1.5);
+    expect(parseBrazilianNumber("1,234.56")).toBe(1234.56);
+    expect(parseBrazilianNumber("2")).toBe(2);
+  });
+  it("retorna null para lixo: só símbolo ou separadores adjacentes", () => {
+    expect(parseBrazilianNumber("R$")).toBeNull();
+    expect(parseBrazilianNumber("1..2")).toBeNull();
+    expect(parseBrazilianNumber("1,,2")).toBeNull();
+  });
+});
+
+// ─── collectRowWarnings ───────────────────────────────────────────────────
+describe("collectRowWarnings — skip com aviso, nunca silêncio", () => {
+  const mapping = { "Valor de Venda": "valor_venda", Unidade: "unidade", Status: "status" };
+
+  it("avisa quando o preço está preenchido mas não converte", () => {
+    const row = { "Valor de Venda": "consultar", Unidade: "101" };
+    const partial = buildPartialUnitFromRow(row, mapping, EMP, 1);
+    expect(partial.valor_venda).toBeUndefined();
+    const w = collectRowWarnings(row, mapping, partial);
+    expect(w).toHaveLength(1);
+    expect(w[0]).toMatch(/Valor de Venda/);
+    expect(w[0]).toMatch(/consultar/);
+  });
+
+  it("não avisa para células em branco nem para campos convertidos com sucesso", () => {
+    const row = { "Valor de Venda": "R$ 350.000", Unidade: "101", Status: "" };
+    const partial = buildPartialUnitFromRow(row, mapping, EMP, 1);
+    expect(partial.valor_venda).toBe(350000);
+    expect(collectRowWarnings(row, mapping, partial)).toHaveLength(0);
+  });
+
+  it("avisa status desconhecido com valor preenchido", () => {
+    const row = { Unidade: "101", Status: "em negociação" };
+    const partial = buildPartialUnitFromRow(row, mapping, EMP, 1);
+    const w = collectRowWarnings(row, mapping, partial);
+    expect(w).toHaveLength(1);
+    expect(w[0]).toMatch(/não reconhecido/);
   });
 });
 

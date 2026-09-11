@@ -5,6 +5,7 @@ import * as XLSX from "xlsx";
 import {
   buildPartialUnitFromRow,
   buildUnitIndex,
+  collectRowWarnings,
   composeUnitToSave,
   DEDICATED_TABLE_MAP,
   findExistingUnit,
@@ -43,9 +44,9 @@ async function reprocessDedicatedIndividually(
 ): Promise<void> {
   for (const op of ops) {
     try {
-      const { error: syncErr } = await supabase
+      const { error: syncErr, count: syncCount } = await supabase
         .from(table)
-        .update(op.payload)
+        .update(op.payload, { count: "exact" })
         .eq("id", op.id);
       if (syncErr) {
         results.sync_failed++;
@@ -53,6 +54,14 @@ async function reprocessDedicatedIndividually(
           `Linha ${op.rowNo} (${op.unitName}): falha ao replicar para ${table}: ${syncErr.message}`
         );
         console.error(`Erro ao sincronizar com ${table}:`, syncErr.message);
+      } else if ((syncCount ?? 1) === 0) {
+        // UPDATE filtrado por RLS que afeta 0 linhas retorna SEM erro no
+        // Supabase — sem contagem, seria sync_ok falso.
+        results.sync_failed++;
+        syncDetails.push(
+          `Linha ${op.rowNo} (${op.unitName}): update em ${table} afetou 0 linhas — valor NÃO aplicado ao espelho público (verifique permissões/RLS da tabela ou se o registro ainda existe)`
+        );
+        console.error(`Sync ${table} afetou 0 linhas para id ${op.id} (unidade ${op.unitName})`);
       } else {
         results.sync_ok++;
       }
@@ -129,9 +138,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Mapear colunas
+    // Mapear colunas (colunas não reconhecidas são reportadas na resposta —
+    // p.ex. cabeçalho "Valor de Venda (R$)" fora do dicionário não atualiza preço)
     const headers = Object.keys(rows[0]);
-    const { mapped: columnMapping } = mapColumns(headers);
+    const { mapped: columnMapping, unmapped: unmappedColumns } = mapColumns(headers);
 
     if (Object.keys(columnMapping).length === 0) {
       return NextResponse.json(
@@ -214,6 +224,7 @@ export async function POST(request: NextRequest) {
     };
     const errorDetails: string[] = [];
     const syncDetails: string[] = [];
+    const warningDetails: string[] = [];
     const nowIso = new Date().toISOString();
 
     const classified: UpsertItem[] = [];
@@ -229,6 +240,12 @@ export async function POST(request: NextRequest) {
         results.skipped++;
         errorDetails.push(`Linha ${i + 1}: unidade vazia, ignorada`);
         continue;
+      }
+
+      // Aviso por célula preenchida que NÃO virou campo (número não convertível,
+      // status desconhecido) — nunca skip em silêncio.
+      for (const w of collectRowWarnings(row, columnMapping, partial)) {
+        warningDetails.push(`Linha ${i + 1} (${unitName}): ${w}`);
       }
 
       // 1) Localizar a unidade existente em projeto_units
@@ -435,9 +452,12 @@ export async function POST(request: NextRequest) {
           batch.map(async ({ group, ops }) => {
             const ids = ops.map((op) => op.id);
             try {
-              const { error: syncErr } = await supabase
+              // count: "exact" — update .in() que afeta menos linhas que os ids
+              // alvo (RLS/registro sumido) NÃO é sucesso pleno; refaz por id
+              // para atribuir exatamente quais unidades não receberam o valor.
+              const { error: syncErr, count: syncCount } = await supabase
                 .from(dedicatedConfig.table)
-                .update(group.payload)
+                .update(group.payload, { count: "exact" })
                 .in("id", ids);
               if (syncErr) {
                 await reprocessDedicatedIndividually(
@@ -447,8 +467,16 @@ export async function POST(request: NextRequest) {
                   results,
                   syncDetails
                 );
-              } else {
+              } else if ((syncCount ?? ops.length) === ops.length) {
                 results.sync_ok += ops.length;
+              } else {
+                await reprocessDedicatedIndividually(
+                  supabase,
+                  dedicatedConfig.table,
+                  ops,
+                  results,
+                  syncDetails
+                );
               }
             } catch {
               await reprocessDedicatedIndividually(
@@ -475,10 +503,12 @@ export async function POST(request: NextRequest) {
       total_units: totalUnits ?? 0,
       total_rows: rows.length,
       columns: columnMapping,
+      unmapped_columns: unmappedColumns,
       partial_spreadsheet: isPartialSpreadsheet,
       duplicated_rows_in_sheet: duplicatedRows,
       errors: errorDetails.length > 0 ? errorDetails : undefined,
       sync_details: syncDetails.length > 0 ? syncDetails : undefined,
+      warnings: warningDetails.length > 0 ? warningDetails : undefined,
     });
   } catch (err) {
     console.error("Erro no upload de Excel:", err);
