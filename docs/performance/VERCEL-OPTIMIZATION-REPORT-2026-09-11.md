@@ -32,7 +32,7 @@ Gates locais finais: **122 testes em 10 arquivos** (78 antes → 122), `tsc --no
 
 - Instalação: `npm ci` (Node v24.19.0, npm 11.17.0). Versões resolvidas idênticas à auditoria: Next 16.1.3, React 19.2.3, Supabase JS 2.101.1, SSR 0.10.0, XLSX 0.18.5, Sharp 0.34.5, TypeScript 5.9.3, jsPDF 4.2.1.
 - HEAD inicial = `6d50841` — exatamente o commit auditado; nenhum achado precisou ser revalidado por divergência de código.
-- Inventário (soma de bytes, MB decimal) — script versionado `scripts/measure-output.js`:
+- Inventário (soma de bytes, MB decimal) — script versionado `scripts/measure-output.mjs`:
 
 | Artefato | Antes | Depois (branch) |
 |---|---:|---:|

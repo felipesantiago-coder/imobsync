@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 /**
  * Inventário de bytes do output de build do ImobSync.
- * Uso: node scripts/measure-output.js
+ * Uso: node scripts/measure-output.mjs
  * Mede somas de bytes por diretório (base decimal) e analisa manifests .nft.json.
  */
-const fs = require('fs');
-const path = require('path');
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const ROOT = path.resolve(__dirname, '..');
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 function dirBytes(dir, { skipNft = false } = {}) {
   let total = 0;
