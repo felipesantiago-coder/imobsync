@@ -67,3 +67,14 @@ export function projectMonthlyFromMtd(
   const total = Math.max(day, Math.floor(daysInMonth));
   return Math.round((monthToDate / day) * total);
 }
+
+/**
+ * Parse/clamp do parâmetro `days` dos resumos (analytics).
+ * Contrato: inteiro entre 1 e 365; ausente/inválido → 30 (default histórico);
+ * fora da faixa → limitado (evita janelas negativas ou absurdas).
+ */
+export function parseDaysParam(raw: string | null): number {
+  const parsed = parseInt(raw || "30", 10);
+  if (!Number.isFinite(parsed)) return 30;
+  return Math.min(365, Math.max(1, parsed));
+}

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   daysInUtcMonth,
+  parseDaysParam,
   projectMonthlyFromMtd,
   utcDayOfMonth,
   utcDayWindow,
@@ -86,5 +87,25 @@ describe("usage-window", () => {
       expect(projectMonthlyFromMtd(-5, 11, 30)).toBe(0);
       expect(projectMonthlyFromMtd(Number.NaN, 11, 30)).toBe(0);
     });
+  });
+});
+
+describe("parseDaysParam (analytics)", () => {
+  it("default 30 quando ausente ou inválido", () => {
+    expect(parseDaysParam(null)).toBe(30);
+    expect(parseDaysParam("")).toBe(30);
+    expect(parseDaysParam("abc")).toBe(30);
+    expect(parseDaysParam("NaN")).toBe(30);
+  });
+
+  it("valor válido é preservado", () => {
+    expect(parseDaysParam("7")).toBe(7);
+    expect(parseDaysParam("365")).toBe(365);
+  });
+
+  it("fora da faixa é limitado (1..365)", () => {
+    expect(parseDaysParam("0")).toBe(1);
+    expect(parseDaysParam("-30")).toBe(1);
+    expect(parseDaysParam("99999")).toBe(365);
   });
 });

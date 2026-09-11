@@ -1,8 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdminSistema } from "@/lib/admin-auth";
+import { parseDaysParam } from "@/lib/usage-window";
 
 export const dynamic = "force-dynamic";
+
+// Paginação anti-truncamento: o padrão do PostgREST limita respostas (padrão
+// documentado: 1.000 linhas). Carregar "tudo" sem range() subnotificava KPIs
+// silenciosamente quando o período ultrapassava o limite.
+const EVENTS_PAGE_SIZE = 1_000;
+const EVENTS_MAX_PAGES = 100; // guarda-corrente: até 100k eventos por requisição
+
+type AnalyticsEventRow = {
+  id: string;
+  event_type: string;
+  resource_type: string | null;
+  resource_id: string | null;
+  metadata: Record<string, unknown> | null;
+  user_id: string | null;
+  role: string | null;
+  created_at: string;
+};
 
 export async function GET(request: NextRequest) {
   const isAllowed = await requireAdminSistema();
@@ -11,30 +29,63 @@ export async function GET(request: NextRequest) {
   // Admin client (service_role) para bypass RLS — já validamos admin acima
   const supabase = createAdminClient();
   const { searchParams } = new URL(request.url);
-  const days = parseInt(searchParams.get("days") || "30");
+  // days validado e limitado (1..365; default 30) — antes aceitava qualquer inteiro
+  const days = parseDaysParam(searchParams.get("days"));
   const role = searchParams.get("role") || null;
   const eventType = searchParams.get("event_type") || null;
 
   const since = new Date();
   since.setDate(since.getDate() - days);
 
-  // 1. Eventos filtrados
-  let eventQuery = supabase
-    .from("analytics_events")
-    .select("*")
-    .gte("created_at", since.toISOString())
-    .order("created_at", { ascending: false });
+  // 1. Eventos filtrados, com paginação determinística (created_at desc + id)
+  //    até esgotar a janela; guarda-corrente limita memória por requisição.
+  const events: AnalyticsEventRow[] = [];
+  let truncated = false;
+  for (let page = 0; page < EVENTS_MAX_PAGES; page++) {
+    const from = page * EVENTS_PAGE_SIZE;
+    let eventQuery = supabase
+      .from("analytics_events")
+      .select("*")
+      .gte("created_at", since.toISOString())
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(from, from + EVENTS_PAGE_SIZE - 1);
 
-  if (role) eventQuery = eventQuery.eq("role", role);
-  if (eventType) eventQuery = eventQuery.eq("event_type", eventType);
+    if (role) eventQuery = eventQuery.eq("role", role);
+    if (eventType) eventQuery = eventQuery.eq("event_type", eventType);
 
-  const { data: events } = await eventQuery;
+    const { data: pageRows, error } = await eventQuery;
+    if (error) {
+      console.error("[analytics] Erro ao paginar eventos:", error.message);
+      break;
+    }
+    const rows = pageRows ?? [];
+    events.push(...(rows as AnalyticsEventRow[]));
+    if (rows.length < EVENTS_PAGE_SIZE) break;
+  }
+  if (events.length >= EVENTS_PAGE_SIZE * EVENTS_MAX_PAGES) truncated = true;
 
-  // 2. Eventos por dia
-  const { data: dailyData } = await supabase
-    .from("analytics_events")
-    .select("created_at")
-    .gte("created_at", since.toISOString());
+  // 2. Eventos por dia — CARACTERIZAÇÃO EXPLÍCITA (audit V06): a série diária
+  //    deliberadamente NÃO aplica os filtros role/event_type aplicados aos
+  //    demais blocos (comportamento pré-existente preservado, agora
+  //    documentado e com paginação anti-truncamento).
+  const dailyData: AnalyticsEventRow[] = [];
+  for (let page = 0; page < EVENTS_MAX_PAGES; page++) {
+    const from = page * EVENTS_PAGE_SIZE;
+    const { data: pageRows, error } = await supabase
+      .from("analytics_events")
+      .select("id, created_at")
+      .gte("created_at", since.toISOString())
+      .order("id", { ascending: true })
+      .range(from, from + EVENTS_PAGE_SIZE - 1);
+    if (error) {
+      console.error("[analytics] Erro ao paginar série diária:", error.message);
+      break;
+    }
+    const rows = pageRows ?? [];
+    dailyData.push(...(rows as AnalyticsEventRow[]));
+    if (rows.length < EVENTS_PAGE_SIZE) break;
+  }
 
   const dailyMap = new Map<string, number>();
   for (let i = days; i >= 0; i--) {
@@ -45,7 +96,7 @@ export async function GET(request: NextRequest) {
   }
   if (dailyData) {
     for (const ev of dailyData) {
-      const key = ev.created_at.slice(0, 10);
+      const key = String(ev.created_at).slice(0, 10);
       dailyMap.set(key, (dailyMap.get(key) || 0) + 1);
     }
   }
@@ -161,5 +212,10 @@ export async function GET(request: NextRequest) {
     topUsers,
     recentEvents,
     statusHistory,
+    meta: {
+      days,
+      events_truncated_at_guard: truncated,
+      daily_series_filters: "a série diária não aplica role/event_type (comportamento pré-existente)",
+    },
   });
 }
