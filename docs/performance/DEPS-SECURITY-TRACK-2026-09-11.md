@@ -97,3 +97,21 @@ O `npm audit` lê o lockfile npm — caminho autoritativo da Vercel (npm ci); o 
 1. **Deploy da branch na Vercel** (preview ou merge) — sem credenciais aqui, gates locais não comprovam runtime; validar login/MFA, espelhos com Realtime (mudança de `ws`), upload Excel (mudança de `xlsx`), PDFs (jspdf/dompurify) e os simuladores.
 2. Repetir `npm audit --production` na Vercel se ela expuser o scan; comparar bundles por região (B1 do relatório principal).
 3. Após merge: monitorar `record-usage`/`monitor-usage.mjs` com os limites configuráveis — a medição corrigida (task de otimização) agora roda sobre as versões atualizadas.
+
+## 8. Validação pós-merge executada e checklist de produção
+
+**Executado localmente (12/09/2026), na `main` mergeada (PRs #8 e #9) pelo caminho exato de instalação da Vercel:**
+
+- `npm ci` a partir do `package-lock.json` (apaga `node_modules`): next **16.3.4**, sharp **0.35.4**, xlsx **0.20.3**, ws **8.21.3** resolvidos pelo lock.
+- Gates completos no tree resultante: `tsc --noEmit` ✅ · vitest **134/134** ✅ · `eslint .` 0 erros/0 avisos ✅ · `next build` ✅ (42 páginas) · `npm audit` **0 vulnerabilidades** ✅.
+- Conteúdo da `main` mergeada conferido idêntico ao da trilha testada (`git diff` vazio contra o fast-forward local dos mesmos commits).
+
+**Checklist para conferir no deploy de produção disparado pelos merges (sem acesso ao painel, fica para o proprietário ou para uma sessão com credenciais):**
+
+| Área (dep alterada) | O que conferir |
+|---|---|
+| Realtime (`ws` 8.21.3) | Dois clientes (admin + usuário): mudança de status em um reflete no outro em segundos; recuperação após reconexão |
+| Excel (`xlsx` 0.20.3) | Reenviar a planilha real do incidente: preços chegam aos dois espelhos; células em branco preservam valor anterior; toast com contadores reais |
+| PDFs (`jspdf`/`dompurify`/`fflate`) | Gerar PDF nos 6 simuladores: valores, datas, INCC, habite-se e paginação idênticos ao baseline |
+| Next 16.3.4 | Login + MFA (TOTP/passkeys), logout (full reload intencional), espelhos com filtros, salvamento de config do simulador (Server Actions), proxy por papel |
+| Painel Vercel | Runtime Logs sem erros novos nas primeiras 24–48 h; curva de Functions/Deployment Storage nos dias seguintes (efeito da retenção só aparece gradualmente) |
