@@ -25,8 +25,13 @@ import { resolve } from "path";
 
 // ── Configuração ──────────────────────────────────────────────
 
-const HOBBY_LIMIT = 100_000;
-const PRO_LIMIT = 1_000_000;
+// Limite configurável da conta. A captura de 11/09/2026 exibia franquia de
+// 1.000.000 de invocações — o padrão abaixo deve ser CONFIRMADO na conta
+// (Vercel → Settings → Usage). Configure USAGE_INVOCATIONS_LIMIT no .env.local.
+const PLAN_LIMIT = Number(process.env.USAGE_INVOCATIONS_LIMIT) || 1_000_000;
+const PLAN_LIMIT_SOURCE = Number(process.env.USAGE_INVOCATIONS_LIMIT)
+  ? "env (.env.local)"
+  : "padrão (CONFIRMAR na conta Vercel)";
 
 // ── Cores para terminal ──────────────────────────────────────
 
@@ -189,7 +194,7 @@ function calculateProjections(metrics) {
     );
     const dailyAvg = Math.round(totalInv / days);
     const monthlyProjection = dailyAvg * 30;
-    const remaining = HOBBY_LIMIT - monthlyProjection;
+    const remaining = PLAN_LIMIT - monthlyProjection;
     const daysToLimit = dailyAvg > 0 ? Math.round(remaining / dailyAvg) : null;
 
     return {
@@ -206,7 +211,7 @@ function calculateProjections(metrics) {
       return { dailyAvg: null, monthlyProjection: null, daysToLimit: null, dailyUsersAvg: null };
     const dailyAvg = Math.round(d30.estimatedInvocations / 30);
     const monthlyProjection = d30.estimatedInvocations;
-    const remaining = HOBBY_LIMIT - monthlyProjection;
+    const remaining = PLAN_LIMIT - monthlyProjection;
     const daysToLimit = dailyAvg > 0 ? Math.round(remaining / dailyAvg) : null;
 
     return {
@@ -244,8 +249,10 @@ function renderReport(vercelData, supabaseMetrics, proj) {
   }
   console.log("");
 
-  // Estimativas
+  // Estimativas — NÃO são medição oficial da Vercel
   console.log(`${c.bold}  ESTIMATIVAS (App Analytics × 1.8)${c.reset}`);
+  console.log(`  ${c.gray}  Estas estimativas não representam medição da Vercel.${c.reset}`);
+  console.log(`  ${c.gray}  Functions Storage: não coletado — ver Usage → Storage → Functions${c.reset}`);
 
   if (supabaseMetrics?.source === "daily_usage_metrics") {
     const latest = supabaseMetrics.data[0];
@@ -273,17 +280,18 @@ function renderReport(vercelData, supabaseMetrics, proj) {
   const bar = "█".repeat(filled) + "░".repeat(barWidth - filled);
   const barColor = percent >= 80 ? c.red : percent >= 50 ? c.yellow : c.green;
 
-  console.log(`  ${c.gray}│ Plano Hobby (100K/mês):${c.reset}`);
+  console.log(`  ${c.gray}│ Limite configurado:${c.reset}`);
   console.log(`  ${c.gray}│ ${barColor}${bar}${c.reset} ${c.bold}${percent}%${c.reset}`);
+  console.log(`  ${c.gray}│ Fonte do limite: ${PLAN_LIMIT_SOURCE}${c.reset}`);
   console.log(`  ${c.gray}│${c.reset}`);
 
   if (monthly !== null && monthly > 0) {
-    log("Projeção mensal", `${monthly.toLocaleString("pt-BR")} invocações`);
-    log("Limite Hobby", `${HOBBY_LIMIT.toLocaleString("pt-BR")}/mês`);
+    log("Projeção mensal (estimativa)", `${monthly.toLocaleString("pt-BR")} invocações`);
+    log("Limite configurado", `${PLAN_LIMIT.toLocaleString("pt-BR")}/mês`);
     log(
       "Margem restante",
-      `${Math.max(HOBBY_LIMIT - monthly, 0).toLocaleString("pt-BR")} invocações`,
-      monthly >= HOBBY_LIMIT ? c.red : c.green
+      `${Math.max(PLAN_LIMIT - monthly, 0).toLocaleString("pt-BR")} invocações`,
+      monthly >= PLAN_LIMIT ? c.red : c.green
     );
   }
 
@@ -310,14 +318,14 @@ function renderReport(vercelData, supabaseMetrics, proj) {
   if (!monthly || monthly === 0) {
     console.log(`  ${c.cyan}  ℹ Use o app por alguns dias para gerar dados de projeção.${c.reset}`);
   } else if (percent >= 80) {
-    console.log(`  ${c.red}  ⚠ MIGRE PARA VERCEL PRO (US$ 20/mês)${c.reset}`);
-    console.log(`  ${c.red}  Você está usando ${percent}% do limite Hobby.${c.reset}`);
-    console.log(`  ${c.red}  O Pro oferece 1.000.000 invocações (10x mais).${c.reset}`);
+    console.log(`  ${c.red}  ⚠ LIMITE PRÓXIMO — verifique o plano contratado${c.reset}`);
+    console.log(`  ${c.red}  Você está usando ${percent}% do limite configurado.${c.reset}`);
+    console.log(`  ${c.red}  Confirme a franquia real em Vercel → Usage antes de decidir.${c.reset}`);
   } else if (percent >= 50) {
     console.log(`  ${c.yellow}  ⚡ Crescimento acelerado — monitore semanalmente.${c.reset}`);
     console.log(`  ${c.yellow}  Considere migrar ao atingir 80%.${c.reset}`);
   } else {
-    console.log(`  ${c.green}  ✅ Plano Hobby suficiente para o volume atual.${c.reset}`);
+    console.log(`  ${c.green}  ✅ Volume atual dentro do limite configurado.${c.reset}`);
     console.log(`  ${c.green}  Execute este script semanalmente para acompanhar.${c.reset}`);
   }
 
