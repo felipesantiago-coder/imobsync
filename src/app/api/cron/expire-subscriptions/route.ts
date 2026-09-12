@@ -1,15 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { withRetry } from '@/lib/cron-retry';
 import { timingSafeEqual } from 'crypto';
 
 /**
  * GET /api/cron/expire-subscriptions
  *
- * Cron Job externo (cron-job.org) — executado uma vez por dia às 05:00 UTC.
+ * Cron Job externo (cron-job.org) — executado uma vez por dia.
  * Encontra assinaturas ativas cujo data_fim ja passou e as expira.
  * Tambem corrige perfis com subscription_status inconsistente.
  *
  * Segurança: acessível via ?secret= (cron-job.org) ou header Authorization.
+ *
+ * Hardenização (2026-09-12, mesmo padrão do reconcile-mp):
+ *  - Queries com retry curto (2 tentativas extras, backoff 500ms/1s).
+ *  - Correção de perfis é FAIL-SAFE: se qualquer leitura falhar, a seção
+ *    INTEIRA é pulada e o erro fica visível — com dados incompletos, perfis
+ *    de usuários ativos/lifetime seriam marcados como 'none' injustamente.
+ *  - Falha parcial (itens em errors) responde 500 — assim o cron-job.org
+ *    marca a execução como falha, retenta e notifica. A expiração usa CAS
+ *    (.eq('status','active')): idempotente, re-executar é seguro.
  */
 export async function GET(request: NextRequest) {
   // Verificação de autorização do cron (timing-safe)
@@ -35,19 +45,30 @@ export async function GET(request: NextRequest) {
     };
 
     // 1. Encontrar assinaturas ativas com data_fim no passado
-    const { data: expiredSubs, error: fetchErr } = await supabase
-      .from('assinaturas')
-      .select('id, user_id, status, data_fim, plano:planos(nome)')
-      .eq('status', 'active')
-      .not('data_fim', 'is', null)
-      .lte('data_fim', agoraISO);
+    //    (retry curto — blips transitorios de rede/Supabase; padrão do reconcile-mp)
+    const expiredSubs = await withRetry(
+      async () => {
+        const { data, error } = await supabase
+          .from('assinaturas')
+          .select('id, user_id, status, data_fim, plano:planos(nome)')
+          .eq('status', 'active')
+          .not('data_fim', 'is', null)
+          .lte('data_fim', agoraISO);
+        if (error) throw new Error(`Supabase: ${error.message}`);
+        return data || [];
+      },
+      {
+        retries: 2,
+        baseDelayMs: 500,
+        onRetry: (attempt, err) =>
+          console.warn(
+            `[cron/expire] Query inicial falhou (retry ${attempt}):`,
+            err instanceof Error ? err.message : err
+          ),
+      }
+    );
 
-    if (fetchErr) {
-      console.error('[cron/expire] Erro ao buscar assinaturas:', fetchErr);
-      return NextResponse.json({ error: 'Erro interno.' }, { status: 500 });
-    }
-
-    if (!expiredSubs || expiredSubs.length === 0) {
+    if (expiredSubs.length === 0) {
       return NextResponse.json({
         ok: true,
         message: 'Nenhuma assinatura para expirar.',
@@ -72,7 +93,7 @@ export async function GET(request: NextRequest) {
         .eq('status', 'active'); // CAS
 
       if (updateErr) {
-        results.errors.push(`Assinatura ${sub.id}: erro ao atualizar.`);
+        results.errors.push(`Assinatura ${sub.id}: erro ao expirar: ${updateErr.message.slice(0, 160)}`);
         console.error(`[cron/expire] Erro ao expirar assinatura ${sub.id}:`, updateErr);
         continue;
       }
@@ -84,56 +105,116 @@ export async function GET(request: NextRequest) {
     }
 
     // 3. Corrigir perfis inconsistentes
-    //    Perfis com subscription_status='active' mas sem assinatura ativa no banco
-    const { data: activeProfiles } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('subscription_status', 'active');
-
-    if (activeProfiles && activeProfiles.length > 0) {
-      // Buscar todos os user_ids com assinatura realmente ativa ou lifetime
-      const { data: realActive } = await supabase
-        .from('assinaturas')
-        .select('user_id')
-        .in('status', ['active', 'lifetime']);
-
-      const activeUserIds = new Set(
-        (realActive || []).map((a: Record<string, unknown>) => a.user_id as string)
+    //    Perfis com subscription_status='active' mas sem assinatura ativa no banco.
+    //    FAIL-SAFE: as 3 leituras usam retry; se ALGUMA falhar definitivamente,
+    //    a correção inteira é pulada com erro visível (dados incompletos fariam
+    //    perfis de usuários ativos/lifetime serem zerados injustamente).
+    try {
+      const activeProfiles = await withRetry(
+        async () => {
+          const { data, error } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('subscription_status', 'active');
+          if (error) throw new Error(`Supabase: ${error.message}`);
+          return data || [];
+        },
+        {
+          retries: 2,
+          baseDelayMs: 500,
+          onRetry: (a, e) =>
+            console.warn(`[cron/expire] Leitura de perfis ativos falhou (retry ${a}):`, e instanceof Error ? e.message : e),
+        }
       );
 
-      // Perfis com subscription_status='lifetime'
-      const { data: lifetimeProfiles } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('subscription_status', 'lifetime');
-      const lifetimeUserIds = new Set(
-        (lifetimeProfiles || []).map((p: Record<string, unknown>) => p.id as string)
-      );
+      if (activeProfiles && activeProfiles.length > 0) {
+        // Buscar todos os user_ids com assinatura realmente ativa ou lifetime
+        const realActive = await withRetry(
+          async () => {
+            const { data, error } = await supabase
+              .from('assinaturas')
+              .select('user_id')
+              .in('status', ['active', 'lifetime']);
+            if (error) throw new Error(`Supabase: ${error.message}`);
+            return data || [];
+          },
+          {
+            retries: 2,
+            baseDelayMs: 500,
+            onRetry: (a, e) =>
+              console.warn(`[cron/expire] Leitura de assinaturas ativas falhou (retry ${a}):`, e instanceof Error ? e.message : e),
+          }
+        );
 
-      const profilesToFix = activeProfiles.filter(
-        (p: Record<string, unknown>) =>
-          !activeUserIds.has(p.id as string) && !lifetimeUserIds.has(p.id as string)
-      );
+        const activeUserIds = new Set(
+          (realActive || []).map((a: Record<string, unknown>) => a.user_id as string)
+        );
 
-      if (profilesToFix.length > 0) {
-        const ids = profilesToFix.map((p: Record<string, unknown>) => p.id as string);
-        const { error: fixErr } = await supabase
-          .from('profiles')
-          .update({ subscription_status: 'none' })
-          .in('id', ids);
+        // Perfis com subscription_status='lifetime'
+        const lifetimeProfiles = await withRetry(
+          async () => {
+            const { data, error } = await supabase
+              .from('profiles')
+              .select('id')
+              .eq('subscription_status', 'lifetime');
+            if (error) throw new Error(`Supabase: ${error.message}`);
+            return data || [];
+          },
+          {
+            retries: 2,
+            baseDelayMs: 500,
+            onRetry: (a, e) =>
+              console.warn(`[cron/expire] Leitura de perfis lifetime falhou (retry ${a}):`, e instanceof Error ? e.message : e),
+          }
+        );
+        const lifetimeUserIds = new Set(
+          (lifetimeProfiles || []).map((p: Record<string, unknown>) => p.id as string)
+        );
 
-        if (!fixErr) {
-          results.profiles_updated = ids.length;
-        } else {
-          results.errors.push('Erro ao corrigir perfis inconsistentes.');
-          console.error('[cron/expire] Erro ao corrigir perfis:', fixErr);
+        const profilesToFix = activeProfiles.filter(
+          (p: Record<string, unknown>) =>
+            !activeUserIds.has(p.id as string) && !lifetimeUserIds.has(p.id as string)
+        );
+
+        if (profilesToFix.length > 0) {
+          const ids = profilesToFix.map((p: Record<string, unknown>) => p.id as string);
+          const { error: fixErr } = await supabase
+            .from('profiles')
+            .update({ subscription_status: 'none' })
+            .in('id', ids);
+
+          if (!fixErr) {
+            results.profiles_updated = ids.length;
+          } else {
+            results.errors.push(`Erro ao corrigir ${ids.length} perfil(is) inconsistente(s): ${fixErr.message.slice(0, 160)}`);
+            console.error('[cron/expire] Erro ao corrigir perfis:', fixErr);
+          }
         }
       }
+    } catch (fixSectionErr) {
+      const msg = fixSectionErr instanceof Error ? fixSectionErr.message : String(fixSectionErr);
+      results.errors.push(`Correção de perfis PULADA (fail-safe): ${msg.slice(0, 160)}`);
+      console.error('[cron/expire] Correção de perfis pulada — leitura falhou após retries:', fixSectionErr);
     }
 
-    console.log(
-      `[cron/expire] Concluido: ${results.expired} expiradas, ${results.profiles_updated} perfis corrigidos.`
-    );
+    const summaryLog = `[cron/expire] Concluido: ${results.expired} expiradas, ${results.profiles_updated} perfis corrigidos, ${results.errors.length} erro(s).`;
+
+    // Falha parcial -> 500 para o cron-job.org marcar como falha (retenta/notifica).
+    // Expiração idempotente (CAS): re-execucao reavalia apenas o que seguir elegivel.
+    if (results.errors.length > 0) {
+      console.error(summaryLog);
+      return NextResponse.json(
+        {
+          ok: false,
+          error: `Expiração concluída com ${results.errors.length} erro(s).`,
+          ...results,
+          checked_at: agoraISO,
+        },
+        { status: 500 }
+      );
+    }
+
+    console.log(summaryLog);
 
     return NextResponse.json({
       ok: true,
