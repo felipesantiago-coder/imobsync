@@ -1424,7 +1424,6 @@ export default function DynamicDashboard({
     await createClient().auth.signOut();
     // Navegação completa (full reload) é intencional no logout: descarta o estado do
     // cliente e o cache RSC do usuário anterior — router.push manteria conteúdo em cache.
-    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
     window.location.href = "/";
   }, []);
 
