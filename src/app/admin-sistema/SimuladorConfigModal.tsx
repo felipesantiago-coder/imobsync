@@ -13,6 +13,7 @@ import {
   clampCaptacaoPct,
   clampFinDiretoParcelas,
 } from "@/lib/financiamento-direto";
+import { limiteParcelasMensais } from "@/lib/parcelas-limite";
 
 const MESES = [
   { value: 1, label: "Janeiro" }, { value: 2, label: "Fevereiro" }, { value: 3, label: "Março" },
@@ -159,6 +160,14 @@ export default function SimuladorConfigModal({
     setError("");
     setSuccess("");
   };
+
+  // Meses-limite das opções de vencimento (recalculados conforme a data de
+  // entrega escolhida — inclusive a fronteira de Janeiro, que recua um ano).
+  const limiteAnterior = limiteParcelasMensais(form.entrega_mes, form.entrega_ano, false);
+  const limiteEntrega = limiteParcelasMensais(form.entrega_mes, form.entrega_ano, true);
+  const mesLabel = (m: number) => MESES[m - 1]?.label ?? `mês ${m}`;
+  const limiteAnteriorLabel = `Até ${mesLabel(limiteAnterior.month)} de ${limiteAnterior.year}`;
+  const limiteEntregaLabel = `Até ${mesLabel(limiteEntrega.month)} de ${limiteEntrega.year}`;
 
   const handleSave = () => {
     if (form.parcela_unica_data_habilitada && !form.parcela_unica_data) {
@@ -313,21 +322,41 @@ export default function SimuladorConfigModal({
                 </div>
               </div>
 
-              {/* Limite das Parcelas Mensais */}
+              {/* Vencimento das Parcelas Mensais */}
               <div>
-                <h3 className="text-sm font-bold text-gray-700 mb-3">Limite das Parcelas Mensais</h3>
-                <label className="block text-xs font-medium text-gray-600 mb-1">As parcelas mensais durante a obra vão até:</label>
+                <h3 className="text-sm font-bold text-gray-700 mb-3">Vencimento das Parcelas Mensais</h3>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Último mês de vencimento das parcelas mensais:</label>
                 <select
                   value={form.parcelas_ate_entrega ? "entrega" : "anterior"}
                   onChange={(e) => setField("parcelas_ate_entrega", e.target.value === "entrega")}
                   className="w-full px-3 py-2.5 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-[#0D1B2A]/20 focus:border-[#0D1B2A] outline-none"
                 >
-                  <option value="anterior">O mês anterior à entrega (padrão)</option>
-                  <option value="entrega">O mês de entrega (inclusive)</option>
+                  <option value="anterior">
+                    {limiteAnteriorLabel} — mês anterior à entrega (padrão)
+                  </option>
+                  <option value="entrega">
+                    {limiteEntregaLabel} — mês da entrega, inclusive
+                  </option>
                 </select>
-                <p className="text-[10px] text-gray-400 mt-1">
-                  Define o último mês das parcelas mensais. Vale para os dois cenários do simulador (financiamento bancário e financiamento direto com a construtora) e também para o limite das parcelas semestrais e anuais.
-                </p>
+                <div className="text-[10px] text-gray-400 mt-1.5 space-y-0.5">
+                  <p>
+                    • <strong className="font-semibold text-gray-500">Até o mês anterior:</strong> a última parcela mensal vence um mês antes do habite-se.
+                  </p>
+                  <p>
+                    • <strong className="font-semibold text-gray-500">Até o mês da entrega:</strong> a última parcela mensal vence no próprio mês do habite-se.
+                  </p>
+                  <p>
+                    Vale para os dois cenários do simulador (financiamento bancário e financiamento direto) e também para o limite das parcelas semestrais e anuais.
+                  </p>
+                </div>
+                {form.parcela_unica_habilitada && form.parcelas_ate_entrega && (
+                  <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-700 flex items-start gap-2 mt-3">
+                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>
+                      Com esta combinação, a última parcela mensal e a Parcela Única Habite-se vencem no mesmo mês (o da entrega). Confirme se esta é a regra comercial desejada.
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Percentuais Padrão */}
