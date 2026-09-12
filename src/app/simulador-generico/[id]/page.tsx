@@ -42,6 +42,10 @@ import {
   clampFinDiretoParcelas,
   priceTotals,
 } from "@/lib/financiamento-direto";
+import {
+  limiteParcelasMensais,
+  limiteParcelasMensaisFrase,
+} from "@/lib/parcelas-limite";
 
 // ─── Types ───
 interface InstallmentRow {
@@ -88,6 +92,7 @@ interface SimuladorConfig {
   fin_direto_construtora: boolean;
   fin_direto_parcelas: number;
   fin_direto_captacao_pct: number;
+  parcelas_ate_entrega: boolean;
 }
 
 interface EmpreendimentoData {
@@ -464,9 +469,21 @@ function SimulatorContent() {
   // Derived config values
   const deliveryMonth = config?.entrega_mes || 11;
   const deliveryYear = config?.entrega_ano || 2027;
-  const paymentLimitMonth = deliveryMonth === 1 ? 12 : deliveryMonth - 1;
-  const paymentLimitYear = deliveryMonth === 1 ? deliveryYear - 1 : deliveryYear;
   const deliveryLabel = `${getDeliveryMonthName(deliveryMonth)} de ${deliveryYear}`;
+  // Mês-limite das parcelas mensais, escolhido pelo administrador:
+  // false (default) = até o mês anterior à entrega; true = até o mês de entrega.
+  // Vale para os dois cenários (bancário e financiamento direto).
+  const parcelasAteEntrega = config?.parcelas_ate_entrega === true;
+  const paymentLimit = useMemo(() => {
+    const limite = limiteParcelasMensais(deliveryMonth, deliveryYear, parcelasAteEntrega);
+    return new Date(Date.UTC(limite.year, limite.month - 1, 28));
+  }, [deliveryMonth, deliveryYear, parcelasAteEntrega]);
+  // Ancora do mês de entrega (Parcela Única Habite-se e projeções pós-entrega
+  // permanecem no mês da entrega, independentemente do limite das mensais).
+  const deliveryDate = useMemo(
+    () => new Date(Date.UTC(deliveryYear, deliveryMonth - 1, 28)),
+    [deliveryYear, deliveryMonth]
+  );
 
   // Max monthly = months between sinal and payment limit
   const dpDate = useMemo(() => {
@@ -476,13 +493,8 @@ function SimulatorContent() {
     );
   }, [downPaymentDate]);
 
-  const paymentLimit = useMemo(() => {
-    return new Date(
-      Date.UTC(paymentLimitYear, paymentLimitMonth - 1, 28)
-    );
-  }, [paymentLimitYear, paymentLimitMonth]);
-
   const totalMonths = Math.max(0, monthsBetween(dpDate, paymentLimit));
+  const deliveryMonthsFromSinal = Math.max(0, monthsBetween(dpDate, deliveryDate));
   const maxSemesterInstallments = Math.floor(totalMonths / 6);
   const maxAnnualInstallments = Math.floor(totalMonths / 12);
 
@@ -692,7 +704,9 @@ function SimulatorContent() {
     }
 
     // ── Parcela Única Habite-se (mês da entrega) ──
-    const unicaMonths = totalMonths + 1;
+    // Ancorada no mês de entrega mesmo quando o admin permite parcelas
+    // mensais até o mês de entrega (deliveryMonthsFromSinal, não totalMonths).
+    const unicaMonths = deliveryMonthsFromSinal;
     const unicaDate =
       unicaMonths > 0 ? addMonthsToDate(dpDate, unicaMonths) : dpDate;
     const unicaScheduleRows: InstallmentRow[] = [];
@@ -810,10 +824,10 @@ function SimulatorContent() {
     const posProjected = posBase * posFactor12;
     const posImpact = posProjected - posBase;
     const posAccumPct = posBase > 0 ? (posImpact / posBase) * 100 : 0;
-    const posDate = addMonthsToDate(dpDate, totalMonths + 1 + 12);
+    const posDate = addMonthsToDate(dpDate, deliveryMonthsFromSinal + 12);
     const posFimDate = addMonthsToDate(
       dpDate,
-      totalMonths + 1 + finDiretoParcelasConfig
+      deliveryMonthsFromSinal + finDiretoParcelasConfig
     );
 
     return {
@@ -914,6 +928,7 @@ function SimulatorContent() {
     dpDate,
     paymentLimit,
     totalMonths,
+    deliveryMonthsFromSinal,
     maxSemesterInstallments,
     maxAnnualInstallments,
     intermediateInstallments,
@@ -1474,6 +1489,7 @@ function SimulatorContent() {
         : "O saldo devedor deverá ser quitado até o habite-se ou financiado com o banco de preferência.",
       `Importante: Os saldos devedores de todas as parcelas serão corrigidos mensalmente pelo INCC (Índice Nacional de Custo da Construção) durante as obras, até o habite-se, e a partir da emissão do habite-se por ${posHabiteseLabel}.`,
       "Os valores, condições e disponibilidade apresentados podem sofrer alteração sem aviso prévio.",
+      `As parcelas mensais durante a obra vão até ${limiteParcelasMensaisFrase(parcelasAteEntrega)}.`,
       `Entrega prevista: ${deliveryLabel}.`,
     ];
     if (decoracaoEnabled) {
@@ -1540,6 +1556,7 @@ function SimulatorContent() {
     downPaymentDate,
     empreendimento,
     config,
+    parcelasAteEntrega,
     deliveryLabel,
     decoracaoEnabled,
     decoracaoTotalValue,
@@ -2061,9 +2078,9 @@ function SimulatorContent() {
                   )}
                 </div>
                 <p className="text-xs text-slate-500">
-                  As parcelas mensais iniciam no mês seguinte ao sinal e vão até
-                  o mês anterior à entrega ({deliveryLabel}). Total de {" "}
-                  <strong>{totalMonths} meses</strong>.
+                  As parcelas mensais iniciam no mês seguinte ao sinal e vão até{" "}
+                  {limiteParcelasMensaisFrase(parcelasAteEntrega)} ({deliveryLabel}). Total de{" "}
+                  <strong>{totalMonths} {totalMonths === 1 ? "mês" : "meses"}</strong>.
                 </p>
               </div>
             </div>
@@ -2145,8 +2162,8 @@ function SimulatorContent() {
                               </div>
                             )}
                             <p className="text-xs text-slate-400">
-                              Pagas a cada 6 meses a partir do sinal, até o mês
-                              anterior à entrega.
+                              Pagas a cada 6 meses a partir do sinal, até{" "}
+                              {limiteParcelasMensaisFrase(parcelasAteEntrega)}.
                             </p>
                           </div>
                         </motion.div>
@@ -2223,8 +2240,8 @@ function SimulatorContent() {
                               </div>
                             )}
                             <p className="text-xs text-slate-400">
-                              Pagas a cada 12 meses a partir do sinal, até o mês
-                              anterior à entrega.
+                              Pagas a cada 12 meses a partir do sinal, até{" "}
+                              {limiteParcelasMensaisFrase(parcelasAteEntrega)}.
                             </p>
                           </div>
                         </motion.div>

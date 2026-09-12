@@ -46,6 +46,7 @@ interface SimuladorConfig {
   fin_direto_construtora: boolean;
   fin_direto_parcelas: number;
   fin_direto_captacao_pct: number;
+  parcelas_ate_entrega: boolean;
 }
 
 interface SimuladorConfigModalProps {
@@ -97,6 +98,7 @@ export default function SimuladorConfigModal({
     fin_direto_construtora: false,
     fin_direto_parcelas: 120,
     fin_direto_captacao_pct: 40,
+    parcelas_ate_entrega: false,
   });
 
   // Carregar config existente
@@ -143,6 +145,7 @@ export default function SimuladorConfigModal({
             fin_direto_construtora: false,
             fin_direto_parcelas: 120,
             fin_direto_captacao_pct: 40,
+            parcelas_ate_entrega: false,
           });
           setExistingConfig(false);
         }
@@ -308,6 +311,23 @@ export default function SimuladorConfigModal({
                     </select>
                   </div>
                 </div>
+              </div>
+
+              {/* Limite das Parcelas Mensais */}
+              <div>
+                <h3 className="text-sm font-bold text-gray-700 mb-3">Limite das Parcelas Mensais</h3>
+                <label className="block text-xs font-medium text-gray-600 mb-1">As parcelas mensais durante a obra vão até:</label>
+                <select
+                  value={form.parcelas_ate_entrega ? "entrega" : "anterior"}
+                  onChange={(e) => setField("parcelas_ate_entrega", e.target.value === "entrega")}
+                  className="w-full px-3 py-2.5 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-[#0D1B2A]/20 focus:border-[#0D1B2A] outline-none"
+                >
+                  <option value="anterior">O mês anterior à entrega (padrão)</option>
+                  <option value="entrega">O mês de entrega (inclusive)</option>
+                </select>
+                <p className="text-[10px] text-gray-400 mt-1">
+                  Define o último mês das parcelas mensais. Vale para os dois cenários do simulador (financiamento bancário e financiamento direto com a construtora) e também para o limite das parcelas semestrais e anuais.
+                </p>
               </div>
 
               {/* Percentuais Padrão */}

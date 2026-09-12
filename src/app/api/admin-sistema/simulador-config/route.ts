@@ -80,6 +80,7 @@ export async function POST(request: NextRequest) {
       fin_direto_construtora,
       fin_direto_parcelas,
       fin_direto_captacao_pct,
+      parcelas_ate_entrega,
     } = body;
 
     if (!empreendimento_id || !entrega_mes || !entrega_ano) {
@@ -137,6 +138,7 @@ export async function POST(request: NextRequest) {
       fin_direto_construtora: !!fin_direto_construtora,
       fin_direto_parcelas: clampFinDiretoParcelas(fin_direto_parcelas),
       fin_direto_captacao_pct: clampCaptacaoPct(fin_direto_captacao_pct),
+      parcelas_ate_entrega: !!parcelas_ate_entrega,
     };
 
     if (parcela_unica_data_habilitada && !parcela_unica_data) {
@@ -197,6 +199,7 @@ export async function PUT(request: NextRequest) {
       "indice_pos_habitese", "juros_pos_habitese", "taxa_decoracao",
       "taxa_decoracao_valor", "taxa_decoracao_parcelas", "taxa_decoracao_inicio", "taxa_decoracao_fim",
       "fin_direto_construtora", "fin_direto_parcelas", "fin_direto_captacao_pct",
+      "parcelas_ate_entrega",
     ];
 
     for (const field of allowedFields) {
@@ -223,6 +226,7 @@ export async function PUT(request: NextRequest) {
     if (updateData.fin_direto_construtora !== undefined) updateData.fin_direto_construtora = !!updateData.fin_direto_construtora;
     if (updateData.fin_direto_parcelas !== undefined) updateData.fin_direto_parcelas = clampFinDiretoParcelas(updateData.fin_direto_parcelas);
     if (updateData.fin_direto_captacao_pct !== undefined) updateData.fin_direto_captacao_pct = clampCaptacaoPct(updateData.fin_direto_captacao_pct);
+    if (updateData.parcelas_ate_entrega !== undefined) updateData.parcelas_ate_entrega = !!updateData.parcelas_ate_entrega;
 
     // Habilitar a parcela exige data no mesmo request quando enviada vazia
     // (atualizações parciais sem o campo mantêm a data já salva).
