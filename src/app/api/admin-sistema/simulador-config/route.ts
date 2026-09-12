@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminSistema } from "@/lib/admin-auth";
 import { createClient } from "@/lib/supabase/server";
+import {
+  clampJurosPosHabitese,
+  normalizePosHabiteseIndice,
+} from "@/lib/pos-habitese";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +64,10 @@ export async function POST(request: NextRequest) {
       anuais_habilitado,
       intermediarias_habilitado,
       parcela_unica_habilitada,
+      parcela_unica_data_habilitada,
+      parcela_unica_data,
+      indice_pos_habitese,
+      juros_pos_habitese,
       taxa_decoracao,
       taxa_decoracao_valor,
       taxa_decoracao_parcelas,
@@ -111,8 +119,22 @@ export async function POST(request: NextRequest) {
       anuais_habilitado: !!anuais_habilitado,
       intermediarias_habilitado: !!intermediarias_habilitado,
       parcela_unica_habilitada: !!parcela_unica_habilitada,
+      parcela_unica_data_habilitada: !!parcela_unica_data_habilitada,
+      parcela_unica_data:
+        parcela_unica_data_habilitada && parcela_unica_data
+          ? String(parcela_unica_data)
+          : null,
+      indice_pos_habitese: normalizePosHabiteseIndice(indice_pos_habitese),
+      juros_pos_habitese: clampJurosPosHabitese(juros_pos_habitese),
       taxa_decoracao: !!taxa_decoracao,
     };
+
+    if (parcela_unica_data_habilitada && !parcela_unica_data) {
+      return NextResponse.json(
+        { error: "Informe a data da Parcela Única ou desative a opção." },
+        { status: 400 }
+      );
+    }
 
     if (taxa_decoracao) {
       insertData.taxa_decoracao_valor = parseFloat(taxa_decoracao_valor) || null;
@@ -161,7 +183,8 @@ export async function PUT(request: NextRequest) {
       "entrega_mes", "entrega_ano", "percentual_sinal", "percentual_captacao",
       "sinal_parcelavel", "sinal_max_parcelas",
       "semestrais_habilitado", "anuais_habilitado", "intermediarias_habilitado",
-      "parcela_unica_habilitada", "taxa_decoracao",
+      "parcela_unica_habilitada", "parcela_unica_data_habilitada", "parcela_unica_data",
+      "indice_pos_habitese", "juros_pos_habitese", "taxa_decoracao",
       "taxa_decoracao_valor", "taxa_decoracao_parcelas", "taxa_decoracao_inicio", "taxa_decoracao_fim",
     ];
 
@@ -182,6 +205,22 @@ export async function PUT(request: NextRequest) {
     if (updateData.percentual_captacao !== undefined) updateData.percentual_captacao = parseFloat(String(updateData.percentual_captacao));
     if (updateData.sinal_parcelavel !== undefined) updateData.sinal_parcelavel = !!updateData.sinal_parcelavel;
     if (updateData.sinal_max_parcelas !== undefined) updateData.sinal_max_parcelas = parseInt(String(updateData.sinal_max_parcelas)) || 3;
+    if (updateData.parcela_unica_data_habilitada !== undefined) updateData.parcela_unica_data_habilitada = !!updateData.parcela_unica_data_habilitada;
+    if (updateData.parcela_unica_data !== undefined) updateData.parcela_unica_data = updateData.parcela_unica_data ? String(updateData.parcela_unica_data) : null;
+    if (updateData.indice_pos_habitese !== undefined) updateData.indice_pos_habitese = normalizePosHabiteseIndice(updateData.indice_pos_habitese);
+    if (updateData.juros_pos_habitese !== undefined) updateData.juros_pos_habitese = clampJurosPosHabitese(updateData.juros_pos_habitese);
+
+    // Habilitar a parcela exige data no mesmo request quando enviada vazia
+    // (atualizações parciais sem o campo mantêm a data já salva).
+    if (
+      updateData.parcela_unica_data_habilitada === true &&
+      (updateData.parcela_unica_data === null || updateData.parcela_unica_data === "")
+    ) {
+      return NextResponse.json(
+        { error: "Informe a data da Parcela Única ou desative a opção." },
+        { status: 400 }
+      );
+    }
     if (updateData.taxa_decoracao_valor !== undefined) updateData.taxa_decoracao_valor = updateData.taxa_decoracao_valor ? parseFloat(String(updateData.taxa_decoracao_valor)) : null;
     if (updateData.taxa_decoracao_parcelas !== undefined) updateData.taxa_decoracao_parcelas = updateData.taxa_decoracao_parcelas ? parseInt(String(updateData.taxa_decoracao_parcelas)) : null;
 

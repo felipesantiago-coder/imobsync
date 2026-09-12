@@ -30,6 +30,11 @@ import {
   Loader2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import {
+  formatJurosPosHabitese,
+  posHabiteseFullLabel,
+  posHabiteseIndexLabel,
+} from "@/lib/pos-habitese";
 
 // ─── Types ───
 interface InstallmentRow {
@@ -64,6 +69,10 @@ interface SimuladorConfig {
   anuais_habilitado: boolean;
   intermediarias_habilitado: boolean;
   parcela_unica_habilitada: boolean;
+  parcela_unica_data_habilitada: boolean;
+  parcela_unica_data: string | null;
+  indice_pos_habitese: string;
+  juros_pos_habitese: number;
   taxa_decoracao: boolean;
   taxa_decoracao_valor: number | null;
   taxa_decoracao_parcelas: number | null;
@@ -101,6 +110,9 @@ interface CalculationResult {
   unicaValue: number;
   unicaPercent: number;
   unicaDate: string;
+  unicaDataValue: number;
+  unicaDataPercent: number;
+  unicaDataDate: string;
   decoracaoPaid: number;
   decoracaoInstallments: number;
   financingAmount: number;
@@ -125,6 +137,7 @@ interface CalculationResult {
   annualRows: InstallmentRow[];
   intermediariasRows: InstallmentRow[];
   unicaScheduleRows: InstallmentRow[];
+  unicaDataScheduleRows: InstallmentRow[];
   decoracaoRows: InstallmentRow[];
 }
 
@@ -191,6 +204,7 @@ type TabKey =
   | "semestral"
   | "anual"
   | "intermediarias"
+  | "unicaData"
   | "unica"
   | "decoracao"
   | "financiamento";
@@ -224,6 +238,7 @@ function SimulatorContent() {
   const [semesterValueInput, setSemesterValueInput] = useState("");
   const [annualValueInput, setAnnualValueInput] = useState("");
   const [unicaValueInput, setUnicaValueInput] = useState("");
+  const [unicaDataValueInput, setUnicaDataValueInput] = useState("");
   const [activeTab, setActiveTab] = useState<TabKey>("sinal");
   const [showResults, setShowResults] = useState(false);
   const track = useTrackEvent();
@@ -308,6 +323,7 @@ function SimulatorContent() {
   const semesterVal = parseVal(semesterValueInput);
   const annualVal = parseVal(annualValueInput);
   const unicaVal = parseVal(unicaValueInput);
+  const unicaDataVal = parseVal(unicaDataValueInput);
   const discount = parseFloat(discountPercent) || 0;
   const finalPropertyValue = propertyValue * (1 - discount / 100);
   const defaultSinalPercent = config?.percentual_sinal || 5;
@@ -409,6 +425,9 @@ function SimulatorContent() {
         unicaValue: 0,
         unicaPercent: 0,
         unicaDate: "",
+        unicaDataValue: 0,
+        unicaDataPercent: 0,
+        unicaDataDate: "",
         decoracaoPaid: 0,
         decoracaoInstallments: 0,
         financingAmount: 0,
@@ -433,6 +452,7 @@ function SimulatorContent() {
         annualRows: [],
         intermediariasRows: [],
         unicaScheduleRows: [],
+        unicaDataScheduleRows: [],
         decoracaoRows: [],
       };
     }
@@ -545,7 +565,7 @@ function SimulatorContent() {
       });
     }
 
-    // ── Parcela Única (mês da entrega) ──
+    // ── Parcela Única Habite-se (mês da entrega) ──
     const unicaMonths = totalMonths + 1;
     const unicaDate =
       unicaMonths > 0 ? addMonthsToDate(dpDate, unicaMonths) : dpDate;
@@ -559,6 +579,24 @@ function SimulatorContent() {
         parcela: "1/1",
         data: formatDateBR(unicaDate),
         valor: formatBRL(unicaVal * inccFactorUnica),
+      });
+    }
+
+    // ── Parcela Única (data definida pelo administrador) ──
+    const unicaDataDate = config.parcela_unica_data_habilitada && config.parcela_unica_data
+      ? new Date(config.parcela_unica_data + "T00:00:00Z")
+      : null;
+    const unicaDataScheduleRows: InstallmentRow[] = [];
+    if (unicaDataDate && unicaDataVal > 0) {
+      const monthsFromSinal = Math.max(0, monthsBetween(dpDate, unicaDataDate));
+      const inccFactorUnicaData =
+        inccMonthlyRate > 0
+          ? Math.pow(1 + inccMonthlyRate / 100, monthsFromSinal)
+          : 1;
+      unicaDataScheduleRows.push({
+        parcela: "1/1",
+        data: formatDateBR(unicaDataDate),
+        valor: formatBRL(unicaDataVal * inccFactorUnicaData),
       });
     }
 
@@ -593,7 +631,7 @@ function SimulatorContent() {
     // ── Totals ──
     // Captation = sinal + all obra installments (NOT decoração)
     const totalObraCaptation =
-      downPaymentValue + mPaid + sPaid + aPaid + intPaid + unicaVal;
+      downPaymentValue + mPaid + sPaid + aPaid + intPaid + unicaVal + unicaDataVal;
     const captPct =
       finalPropertyValue > 0
         ? (totalObraCaptation / finalPropertyValue) * 100
@@ -653,6 +691,10 @@ function SimulatorContent() {
       unicaPercent:
         finalPropertyValue > 0 ? (unicaVal / finalPropertyValue) * 100 : 0,
       unicaDate: formatDateBR(unicaDate),
+      unicaDataValue: unicaDataVal,
+      unicaDataPercent:
+        finalPropertyValue > 0 ? (unicaDataVal / finalPropertyValue) * 100 : 0,
+      unicaDataDate: unicaDataDate ? formatDateBR(unicaDataDate) : "",
       decoracaoPaid: dPaid,
       decoracaoInstallments: decoracaoNumParcelas,
       financingAmount: financing,
@@ -678,6 +720,7 @@ function SimulatorContent() {
       annualRows,
       intermediariasRows,
       unicaScheduleRows,
+      unicaDataScheduleRows,
       decoracaoRows,
     };
   }, [
@@ -690,6 +733,7 @@ function SimulatorContent() {
     semesterVal,
     annualVal,
     unicaVal,
+    unicaDataVal,
     finalPropertyValue,
     inccMonthlyRate,
     inccMode,
@@ -768,6 +812,7 @@ function SimulatorContent() {
     setSemesterValueInput("");
     setAnnualValueInput("");
     setUnicaValueInput("");
+    setUnicaDataValueInput("");
     setDownPaymentInstallments("1");
     setDownPaymentDate(getTodayISO());
     setShowResults(false);
@@ -791,8 +836,11 @@ function SimulatorContent() {
     if (config?.intermediarias_habilitado) {
       tabs.push({ key: "intermediarias", label: "Interm." });
     }
+    if (config?.parcela_unica_data_habilitada) {
+      tabs.push({ key: "unicaData", label: "Única" });
+    }
     if (config?.parcela_unica_habilitada) {
-      tabs.push({ key: "unica", label: "Única" });
+      tabs.push({ key: "unica", label: "Única Hab." });
     }
     if (decoracaoEnabled) {
       tabs.push({ key: "decoracao", label: "Decoração" });
@@ -923,9 +971,16 @@ function SimulatorContent() {
         `${result.intermediariasPaidPercent.toFixed(2)}%`,
       ]);
     }
+    if (config?.parcela_unica_data_habilitada && result.unicaDataValue > 0) {
+      summaryBody.push([
+        `Única (data definida)`,
+        formatBRL(result.unicaDataValue),
+        `${result.unicaDataPercent.toFixed(2)}%`,
+      ]);
+    }
     if (config?.parcela_unica_habilitada && result.unicaValue > 0) {
       summaryBody.push([
-        `Única (mês de entrega)`,
+        `Única Habite-se (mês de entrega)`,
         formatBRL(result.unicaValue),
         `${result.unicaPercent.toFixed(2)}%`,
       ]);
@@ -1000,8 +1055,11 @@ function SimulatorContent() {
     if (config?.intermediarias_habilitado) {
       renderSchedule("Intermediárias", result.intermediariasRows);
     }
+    if (config?.parcela_unica_data_habilitada) {
+      renderSchedule("Parcela Única", result.unicaDataScheduleRows);
+    }
     if (config?.parcela_unica_habilitada) {
-      renderSchedule("Parcela Única", result.unicaScheduleRows);
+      renderSchedule("Parcela Única Habite-se", result.unicaScheduleRows);
     }
     if (decoracaoEnabled) {
       renderSchedule("Decoração", result.decoracaoRows);
@@ -1112,6 +1170,47 @@ function SimulatorContent() {
       yPos += disclaimerLines.length * 3.5 + 10;
     }
 
+    // ── Correção do Saldo Devedor (última página, antes das Observações) ──
+    if (yPos > 170) {
+      doc.addPage();
+      yPos = 20;
+    }
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(0, 0, 0);
+    doc.text("Correção do Saldo Devedor", margin, yPos);
+    yPos += 8;
+    autoTable(doc, {
+      startY: yPos + 2,
+      head: [["Fase", "Índice de Correção"]],
+      body: [
+        [
+          "Durante as obras (até o habite-se)",
+          "INCC — Índice Nacional de Custo da Construção, corrigido mensalmente",
+        ],
+        [
+          "Após a emissão do habite-se",
+          `${posHabiteseIndexLabel(config?.indice_pos_habitese)} + juros de ${formatJurosPosHabitese(config?.juros_pos_habitese)} ao mês, sobre o saldo devedor remanescente`,
+        ],
+      ],
+      theme: "grid",
+      headStyles: { fillColor: primaryColor, textColor: 255 },
+      margin: { top: 10, left: margin, right: margin },
+      columnStyles: {
+        0: { fontStyle: "bold", cellWidth: 60 },
+      },
+    });
+    yPos = doc.lastAutoTable.finalY + 6;
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "italic");
+    doc.setTextColor(90, 90, 90);
+    const correctionNoteLines = doc.splitTextToSize(
+      "A correção durante as obras é sempre pelo INCC. A partir da emissão do habite-se, o saldo devedor passa a ser corrigido pelo índice contratado mais a taxa de juros mensal indicada acima, até a efetiva quitação.",
+      pageWidth - margin * 2
+    );
+    doc.text(correctionNoteLines, margin, yPos);
+    yPos += correctionNoteLines.length * 3.5 + 8;
+
     // Notes
     if (yPos > 210) {
       doc.addPage();
@@ -1125,9 +1224,13 @@ function SimulatorContent() {
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
+    const posHabiteseLabel = posHabiteseFullLabel(
+      config?.indice_pos_habitese,
+      config?.juros_pos_habitese
+    );
     const notes = [
       "O saldo devedor deverá ser quitado até o habite-se ou financiado com o banco de preferência.",
-      "Importante: Os saldos devedores de todas as parcelas serão corrigidos mensalmente pelo INCC (Índice Nacional de Custo da Construção) até o habite-se e posteriormente por IGPM + 1%.",
+      `Importante: Os saldos devedores de todas as parcelas serão corrigidos mensalmente pelo INCC (Índice Nacional de Custo da Construção) durante as obras, até o habite-se, e a partir da emissão do habite-se por ${posHabiteseLabel}.`,
       "Os valores, condições e disponibilidade apresentados podem sofrer alteração sem aviso prévio.",
       `Entrega prevista: ${deliveryLabel}.`,
     ];
@@ -1264,9 +1367,21 @@ function SimulatorContent() {
         isDecoracao: false,
       });
     }
-    if (config?.parcela_unica_habilitada && result.unicaValue > 0) {
+    if (config?.parcela_unica_data_habilitada && result.unicaDataValue > 0) {
       rows.push({
         description: "Única",
+        value: formatBRL(result.unicaDataValue),
+        percent: result.unicaDataPercent,
+        note: `1 parcela em ${result.unicaDataDate}`,
+        bold: false,
+        isHighlight: false,
+        isIncc: false,
+        isDecoracao: false,
+      });
+    }
+    if (config?.parcela_unica_habilitada && result.unicaValue > 0) {
+      rows.push({
+        description: "Única Habite-se",
         value: formatBRL(result.unicaValue),
         percent: result.unicaPercent,
         note: `1 parcela em ${result.unicaDate}`,
@@ -1905,7 +2020,72 @@ function SimulatorContent() {
                   </motion.div>
                 )}
 
-                {/* Parcela Única */}
+                {/* Parcela Única (data definida pelo administrador) */}
+                {config.parcela_unica_data_habilitada && (
+                  <motion.div
+                    layout
+                    className="rounded-xl border border-slate-200 overflow-hidden"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleOptional("unicaData")}
+                      className={`flex items-center justify-between w-full p-4 transition-all ${expandedOptional.has("unicaData") ? "bg-rose-50 border-b border-rose-100" : "bg-slate-50 hover:bg-slate-100"}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-3 h-3 rounded-full ${unicaDataVal > 0 ? "bg-rose-500" : "bg-slate-300"}`} />
+                        <span className="font-semibold text-slate-700">
+                          Parcela Única
+                        </span>
+                        <span className="text-xs text-slate-400">
+                          (em {result.unicaDataDate || "data definida pelo empreendimento"})
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {unicaDataVal > 0 && (
+                          <span className="text-xs font-medium text-rose-700 bg-rose-100 px-2 py-0.5 rounded-full">
+                            Ativo
+                          </span>
+                        )}
+                        {expandedOptional.has("unicaData") ? (
+                          <ChevronUp className="w-4 h-4 text-slate-400" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-slate-400" />
+                        )}
+                      </div>
+                    </button>
+                    <AnimatePresence>
+                      {expandedOptional.has("unicaData") && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="p-4 space-y-3 border-t border-slate-100">
+                            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">
+                              Valor da Parcela Única (R$)
+                            </label>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={unicaDataValueInput}
+                              onChange={handleCurrencyInput(setUnicaDataValueInput)}
+                              placeholder="Informe o valor (opcional)"
+                              className="w-full h-12 px-4 rounded-xl border border-slate-200 bg-slate-50 text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-rose-600 focus:bg-white transition-all placeholder:text-slate-400 text-right"
+                            />
+                            <p className="text-xs text-slate-400">
+                              Paga em {result.unicaDataDate || "data definida pelo empreendimento"}.
+                              Compõe a captação da obra.
+                            </p>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.div>
+                )}
+
+                {/* Parcela Única Habite-se */}
                 {config.parcela_unica_habilitada && (
                   <motion.div
                     layout
@@ -1919,7 +2099,7 @@ function SimulatorContent() {
                       <div className="flex items-center gap-3">
                         <div className={`w-3 h-3 rounded-full ${unicaVal > 0 ? "bg-amber-500" : "bg-slate-300"}`} />
                         <span className="font-semibold text-slate-700">
-                          Parcela Única
+                          Parcela Única Habite-se
                         </span>
                         <span className="text-xs text-slate-400">
                           (mês da entrega)
@@ -1949,7 +2129,7 @@ function SimulatorContent() {
                         >
                           <div className="p-4 space-y-3 border-t border-slate-100">
                             <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">
-                              Valor da Parcela Única (R$)
+                              Valor da Parcela Única Habite-se (R$)
                             </label>
                             <input
                               type="text"
@@ -1960,7 +2140,7 @@ function SimulatorContent() {
                               className="w-full h-12 px-4 rounded-xl border border-slate-200 bg-slate-50 text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-600 focus:bg-white transition-all placeholder:text-slate-400 text-right"
                             />
                             <p className="text-xs text-slate-400">
-                              Paga no mês da entrega ({deliveryLabel}).
+                              Paga no mês da entrega/habite-se ({deliveryLabel}).
                               Compõe a captação da obra.
                             </p>
                           </div>
@@ -1974,7 +2154,8 @@ function SimulatorContent() {
                 {!config.semestrais_habilitado &&
                   !config.anuais_habilitado &&
                   !config.intermediarias_habilitado &&
-                  !config.parcela_unica_habilitada && (
+                  !config.parcela_unica_habilitada &&
+                  !config.parcela_unica_data_habilitada && (
                     <p className="text-sm text-slate-400 text-center py-4">
                       Nenhum tipo de parcela opcional habilitado para este
                       empreendimento.
@@ -2298,6 +2479,8 @@ function SimulatorContent() {
                                 ? result.annualRows
                                 : activeTab === "intermediarias"
                                   ? result.intermediariasRows
+                                  : activeTab === "unicaData"
+                                  ? result.unicaDataScheduleRows
                                   : activeTab === "unica"
                                     ? result.unicaScheduleRows
                                     : activeTab === "decoracao"
@@ -2463,10 +2646,18 @@ function ScheduleTable({
     );
   }
 
-  if (activeTab === "unica" && rows.length === 0) {
+  if (activeTab === "unicaData" && rows.length === 0) {
     return (
       <p className="text-slate-400 text-sm py-4 text-center">
         Nenhuma parcela única informada
+      </p>
+    );
+  }
+
+  if (activeTab === "unica" && rows.length === 0) {
+    return (
+      <p className="text-slate-400 text-sm py-4 text-center">
+        Nenhuma parcela única habite-se informada
       </p>
     );
   }
@@ -2547,11 +2738,23 @@ function ScheduleTable({
               </tr>
             )}
           </tbody>
-          {activeTab === "unica" && rows.length > 0 && (
+          {activeTab === "unicaData" && rows.length > 0 && (
             <tfoot>
               <tr className="bg-slate-50 font-bold border-t border-slate-200">
                 <td className="py-2 px-4" colSpan={2}>
                   Total parcela única
+                </td>
+                <td className="py-2 px-4 text-right">
+                  {formatBRL(result.unicaDataValue)}
+                </td>
+              </tr>
+            </tfoot>
+          )}
+          {activeTab === "unica" && rows.length > 0 && (
+            <tfoot>
+              <tr className="bg-slate-50 font-bold border-t border-slate-200">
+                <td className="py-2 px-4" colSpan={2}>
+                  Total parcela única habite-se
                 </td>
                 <td className="py-2 px-4 text-right">
                   {formatBRL(result.unicaValue)}

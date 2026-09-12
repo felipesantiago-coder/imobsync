@@ -5,6 +5,10 @@ import {
   Calculator, X, Loader2, Save, Trash2, Settings, AlertTriangle,
 } from "lucide-react";
 import ConfirmDialog from "@/components/confirm-dialog";
+import {
+  formatJurosPosHabitese,
+  posHabiteseIndexLabel,
+} from "@/lib/pos-habitese";
 
 const MESES = [
   { value: 1, label: "Janeiro" }, { value: 2, label: "Fevereiro" }, { value: 3, label: "Março" },
@@ -26,6 +30,10 @@ interface SimuladorConfig {
   anuais_habilitado: boolean;
   intermediarias_habilitado: boolean;
   parcela_unica_habilitada: boolean;
+  parcela_unica_data_habilitada: boolean;
+  parcela_unica_data: string | null;
+  indice_pos_habitese: string;
+  juros_pos_habitese: number;
   taxa_decoracao: boolean;
   taxa_decoracao_valor: number | null;
   taxa_decoracao_parcelas: number | null;
@@ -70,6 +78,10 @@ export default function SimuladorConfigModal({
     anuais_habilitado: false,
     intermediarias_habilitado: false,
     parcela_unica_habilitada: false,
+    parcela_unica_data_habilitada: false,
+    parcela_unica_data: null,
+    indice_pos_habitese: "igpm",
+    juros_pos_habitese: 1,
     taxa_decoracao: false,
     taxa_decoracao_valor: null,
     taxa_decoracao_parcelas: null,
@@ -109,6 +121,10 @@ export default function SimuladorConfigModal({
             anuais_habilitado: false,
             intermediarias_habilitado: false,
             parcela_unica_habilitada: false,
+            parcela_unica_data_habilitada: false,
+            parcela_unica_data: null,
+            indice_pos_habitese: "igpm",
+            juros_pos_habitese: 1,
             taxa_decoracao: false,
             taxa_decoracao_valor: null,
             taxa_decoracao_parcelas: null,
@@ -129,6 +145,10 @@ export default function SimuladorConfigModal({
   };
 
   const handleSave = () => {
+    if (form.parcela_unica_data_habilitada && !form.parcela_unica_data) {
+      setError("Informe a data da Parcela Única ou desative a opção.");
+      return;
+    }
     // Show confirmation before saving
     setSaveConfirm(true);
   };
@@ -353,7 +373,8 @@ export default function SimuladorConfigModal({
                     { key: "semestrais_habilitado" as const, label: "Parcelas Semestrais", desc: "A cada 6 meses" },
                     { key: "anuais_habilitado" as const, label: "Parcelas Anuais", desc: "Anualmente até a entrega" },
                     { key: "intermediarias_habilitado" as const, label: "Parcelas Intermediárias", desc: "Datas livres definidas pelo usuário" },
-                    { key: "parcela_unica_habilitada" as const, label: "Parcela Única", desc: "No mês de entrega" },
+                    { key: "parcela_unica_habilitada" as const, label: "Parcela Única Habite-se", desc: "No mês do habite-se (entrega)" },
+                    { key: "parcela_unica_data_habilitada" as const, label: "Parcela Única", desc: "Em data definida por você" },
                   ].map((item) => (
                     <label
                       key={item.key}
@@ -376,6 +397,60 @@ export default function SimuladorConfigModal({
                     </label>
                   ))}
                 </div>
+
+                {form.parcela_unica_data_habilitada && (
+                  <div className="pl-7 border-l-2 border-gray-200 ml-2 mt-3">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Data da Parcela Única
+                    </label>
+                    <input
+                      type="date"
+                      value={form.parcela_unica_data || ""}
+                      onChange={(e) => setField("parcela_unica_data", e.target.value || null)}
+                      className="w-full px-3 py-2.5 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-[#0D1B2A]/20 focus:border-[#0D1B2A] outline-none"
+                    />
+                    <p className="text-[10px] text-gray-400 mt-1">
+                      O usuário informará apenas o valor; a data desta parcela é fixa para o empreendimento.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Correção Pós-Habite-se */}
+              <div>
+                <h3 className="text-sm font-bold text-gray-700 mb-3">Correção Pós-Habite-se</h3>
+                <p className="text-xs text-gray-400 mb-3">
+                  Durante as obras o saldo devedor é sempre corrigido pelo INCC. Após a emissão do habite-se, passa a valer o índice e os juros abaixo.
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Índice de correção</label>
+                    <select
+                      value={form.indice_pos_habitese}
+                      onChange={(e) => setField("indice_pos_habitese", e.target.value)}
+                      className="w-full px-3 py-2.5 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-[#0D1B2A]/20 focus:border-[#0D1B2A] outline-none"
+                    >
+                      <option value="igpm">IGPM</option>
+                      <option value="ipca">IPCA</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Juros (% ao mês)</label>
+                    <input
+                      type="number"
+                      step="0.05"
+                      min="0"
+                      max="20"
+                      value={form.juros_pos_habitese}
+                      onChange={(e) => setField("juros_pos_habitese", parseFloat(e.target.value) || 0)}
+                      className="w-full px-3 py-2.5 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-[#0D1B2A]/20 focus:border-[#0D1B2A] outline-none"
+                      placeholder="Ex: 1 ou 0,80"
+                    />
+                  </div>
+                </div>
+                <p className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 mt-3">
+                  Após o habite-se: saldo devedor corrigido por <strong>{posHabiteseIndexLabel(form.indice_pos_habitese)} + juros de {formatJurosPosHabitese(form.juros_pos_habitese)} ao mês</strong>.
+                </p>
               </div>
 
               {/* Taxa de Decoração */}
