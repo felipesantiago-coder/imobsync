@@ -208,7 +208,7 @@ Issues: `docs/security-audit/issues-github.md`
 - `NEXT_PUBLIC_TURNSTILE_SITE_KEY`
 
 ### Opcionais
-- `SEED_ADMIN_EMAIL` (default hardcoded: prosperosdirecional@gmail.com — Issue 5)
+- `SEED_ADMIN_EMAIL` (sem default no código — o antigo fallback hardcoded foi removido pela auditoria, Issue 5)
 - `VERCEL_TOKEN` (para o script monitor-usage.mjs consultar API do Vercel)
 - `ADMIN_EMAILS` (fallback em api-auth.ts — sera removido)
 

@@ -298,7 +298,7 @@ FINDINGS = [
     ]),
     ('CAT 4 - Chaves Expostas', [
         ('MEDIA', 'src/app/api/admin-sistema/seed-admin/route.ts:6',
-         'Email admin hardcoded: "prosperosdirecional@gmail.com" como default. Se SEED_ADMIN_EMAIL ausente, um usuario nao-intencionado pode ser elevado a admin_sistema.'),
+         'Email admin hardcoded (REDACTED) como default. Se SEED_ADMIN_EMAIL ausente, um usuario nao-intencionado pode ser elevado a admin_sistema.'),
         ('MEDIA', 'src/app/page.tsx:117 + 2 outros .tsx',
          'Email do admin hardcoded no bundle JS do frontend (3 arquivos). Facilita enumeracao de conta privilegiada e ataques de phishing direcionados.'),
         ('BAIXA', 'Historico git (commit 82d010b)',

@@ -210,7 +210,7 @@ Multiplos achados de severidade media agrupados:
 
 **5c - CSP com unsafe-inline e unsafe-eval:** next.config.ts:34 permite esses diretivas, anulando a protecao do CSP contra XSS.
 
-**5d - Email admin hardcoded no frontend:** 3 arquivos .tsx comparam email hardcoded "prosperosdirecional@gmail.com" no bundle JS.
+**5d - Email admin hardcoded no frontend:** 3 arquivos .tsx comparam email hardcoded (REDACTED) no bundle JS.
 
 **5e - seed-admin com email default:** route.ts:6 usa fallback hardcoded se env var ausente.
 

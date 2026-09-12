@@ -25,7 +25,8 @@ LEFT JOIN public.profiles p ON p.id = u.id
 ORDER BY u.created_at ASC;
 
 -- ── 2) Promoção idempotente (cria o profile se faltar, promove se existir) ──
---    Se o email de login do admin for outro, troque o literal abaixo.
+--    ⚠️ SUBSTITUA <EMAIL_DO_ADMIN> abaixo pelo email real de login do
+--    administrador ANTES de executar (o passo 1 lista os usuários).
 INSERT INTO public.profiles (id, email, display_name, role)
 SELECT
   u.id,
@@ -33,7 +34,7 @@ SELECT
   COALESCE(u.raw_user_meta_data->>'display_name', 'Administrador do Sistema'),
   'admin_sistema'
 FROM auth.users u
-WHERE lower(u.email) = lower('prosperosdirecional@gmail.com')
+WHERE lower(u.email) = lower('<EMAIL_DO_ADMIN>')
 ON CONFLICT (id) DO UPDATE
   SET role       = 'admin_sistema',
       updated_at = now();
@@ -42,4 +43,4 @@ ON CONFLICT (id) DO UPDATE
 SELECT u.email, p.role, p.updated_at
 FROM public.profiles p
 JOIN auth.users u ON u.id = p.id
-WHERE lower(u.email) = lower('prosperosdirecional@gmail.com');
+WHERE lower(u.email) = lower('<EMAIL_DO_ADMIN>');
