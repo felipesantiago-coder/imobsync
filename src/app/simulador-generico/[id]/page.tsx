@@ -19,6 +19,7 @@ import {
   RotateCcw,
   TrendingUp,
   Home,
+  Landmark,
   Wallet,
   CalendarClock,
   Settings,
@@ -37,6 +38,10 @@ import {
   posHabiteseFullLabel,
   posHabiteseIndexLabel,
 } from "@/lib/pos-habitese";
+import {
+  clampFinDiretoParcelas,
+  priceTotals,
+} from "@/lib/financiamento-direto";
 
 // ─── Types ───
 interface InstallmentRow {
@@ -80,6 +85,9 @@ interface SimuladorConfig {
   taxa_decoracao_parcelas: number | null;
   taxa_decoracao_inicio: string | null;
   taxa_decoracao_fim: string | null;
+  fin_direto_construtora: boolean;
+  fin_direto_parcelas: number;
+  fin_direto_captacao_pct: number;
 }
 
 interface EmpreendimentoData {
@@ -143,6 +151,12 @@ interface CalculationResult {
   sRemainingCorrected: number;
   aRemainingCorrected: number;
   hBalanceCorrected: number;
+  finDiretoActive: boolean;
+  finDiretoParcelas: number;
+  posPmt: number;
+  posTotalPago: number;
+  posJurosTotal: number;
+  posFimLabel: string;
   sinalRows: InstallmentRow[];
   monthlyRows: InstallmentRow[];
   semesterRows: InstallmentRow[];
@@ -284,6 +298,10 @@ function SimulatorContent() {
 
   // Índice pós-habite-se (IGPM/IPCA conforme escolha do administrador)
   const [posMode, setPosMode] = useState<InccMode>("none");
+  // Cenário pós-entrega: bancário (padrão) ou financiamento direto com a construtora
+  const [modoFinanciamento, setModoFinanciamento] = useState<
+    "bancario" | "direto"
+  >("bancario");
   const [posData, setPosData] = useState<InccData>({
     avg180: 0,
     avg12: 0,
@@ -430,6 +448,19 @@ function SimulatorContent() {
     ? posHabiteseIndexLabel(config.indice_pos_habitese)
     : "IGPM";
 
+  // ── Cenário de financiamento ──
+  // "direto" só é válido quando o administrador habilitou a opção.
+  const finDiretoAvailable = config?.fin_direto_construtora === true;
+  const modoDireto = finDiretoAvailable && modoFinanciamento === "direto";
+  // Estimativa de correção pós-entrega (média do índice + juros) só existe
+  // no cenário de financiamento direto; no padrão o PDF apenas informa.
+  const posEstimativaAtiva =
+    modoDireto && posMode !== "none" && posTotalRate > 0;
+  // Meta de captação exibida no resumo (cenário direto tem meta própria)
+  const captacaoTarget = modoDireto
+    ? config?.fin_direto_captacao_pct || 40
+    : config?.percentual_captacao || 25;
+
   // Derived config values
   const deliveryMonth = config?.entrega_mes || 11;
   const deliveryYear = config?.entrega_ano || 2027;
@@ -535,6 +566,12 @@ function SimulatorContent() {
         sRemainingCorrected: 0,
         aRemainingCorrected: 0,
         hBalanceCorrected: 0,
+        finDiretoActive: false,
+        finDiretoParcelas: 0,
+        posPmt: 0,
+        posTotalPago: 0,
+        posJurosTotal: 0,
+        posFimLabel: "",
         sinalRows: [],
         monthlyRows: [],
         semesterRows: [],
@@ -755,16 +792,29 @@ function SimulatorContent() {
         : 0;
 
     // Estimativa pós-habite-se: saldo no habite-se (corrigido pelo INCC quando
-    // a estimativa de obra está ativa) projetado por 12 meses pela média do
-    // índice escolhido pelo administrador + juros configurados.
-    const posFactor12 =
-      posTotalRate > 0 ? Math.pow(1 + posTotalRate / 100, 12) : 1;
+    // a estimativa de obra está ativa) projetado pela média do índice escolhido
+    // pelo administrador + juros configurados.
+    // - Cenário DIRETO (construtora): parcelamento PRICE em N parcelas fixas.
+    // - Cenário PADRÃO (bancário): nenhuma correção é calculada no app
+    //   (o PDF apenas informa a existência da correção contratual).
     const posInccActive = inccMode !== "none" && inccAccumulatedPercent > 0;
     const posBase = posInccActive ? hBalanceCorrected : hBalance;
+    const finDiretoParcelasConfig = clampFinDiretoParcelas(
+      config.fin_direto_parcelas
+    );
+    const priceEst = posEstimativaAtiva && posBase > 0
+      ? priceTotals(posBase, posTotalRate, finDiretoParcelasConfig)
+      : { pmt: 0, total: 0, juros: 0 };
+    const posFactor12 =
+      posTotalRate > 0 ? Math.pow(1 + posTotalRate / 100, 12) : 1;
     const posProjected = posBase * posFactor12;
     const posImpact = posProjected - posBase;
     const posAccumPct = posBase > 0 ? (posImpact / posBase) * 100 : 0;
     const posDate = addMonthsToDate(dpDate, totalMonths + 1 + 12);
+    const posFimDate = addMonthsToDate(
+      dpDate,
+      totalMonths + 1 + finDiretoParcelasConfig
+    );
 
     return {
       finalPropertyValue,
@@ -825,6 +875,12 @@ function SimulatorContent() {
       sRemainingCorrected,
       aRemainingCorrected,
       hBalanceCorrected,
+      finDiretoActive: modoDireto,
+      finDiretoParcelas: finDiretoParcelasConfig,
+      posPmt: priceEst.pmt,
+      posTotalPago: priceEst.total,
+      posJurosTotal: priceEst.juros,
+      posFimLabel: formatDateBR(posFimDate),
       sinalRows,
       monthlyRows,
       semesterRows,
@@ -852,6 +908,8 @@ function SimulatorContent() {
     posIndexRate,
     posJuros,
     posTotalRate,
+    modoDireto,
+    posEstimativaAtiva,
     config,
     dpDate,
     paymentLimit,
@@ -1102,7 +1160,9 @@ function SimulatorContent() {
       ]);
     }
     summaryBody.push([
-      "Financiamento",
+      modoDireto
+        ? "Financiamento direto construtora"
+        : "Financiamento",
       formatBRL(result.financingAmount),
       `${result.financingPercent.toFixed(2)}%`,
     ]);
@@ -1286,15 +1346,15 @@ function SimulatorContent() {
       yPos += disclaimerLines.length * 3.5 + 10;
     }
 
-    // ── Estimativa de Correção Pós-Habite-se (índice do admin + juros) ──
-    if (posMode !== "none" && posTotalRate > 0 && result.posBase > 0) {
+    // ── Estimativa das parcelas PRICE (somente cenário de financiamento direto) ──
+    if (posEstimativaAtiva && result.posBase > 0) {
       if (yPos > 200) {
         doc.addPage();
         yPos = 20;
       }
       doc.setFontSize(14);
       doc.setFont("helvetica", "bold");
-      doc.text("Estimativa de Correção Pós-Habite-se", margin, yPos);
+      doc.text("Financiamento Direto com a Construtora (Estimativa)", margin, yPos);
       yPos += 10;
       const posMetricLabel =
         posMode === "180m"
@@ -1310,6 +1370,10 @@ function SimulatorContent() {
         head: [["Descrição", "Valor"]],
         body: [
           [
+            "Modalidade",
+            `Financiamento direto com a construtora — ${result.finDiretoParcelas} parcelas mensais fixas (sistema PRICE)`,
+          ],
+          [
             "Índice Aplicado",
             `${posIndexLabel} + juros de ${formatJurosPosHabitese(config?.juros_pos_habitese)} ao mês`,
           ],
@@ -1319,10 +1383,12 @@ function SimulatorContent() {
           ],
           ["Métrica Utilizada", posMetricLabel],
           ["Fonte dos Dados", posSourceLabel],
-          ["Período de Projeção", "12 meses após o habite-se"],
-          ["Saldo no Habite-se", formatBRL(result.posBase)],
-          ["Saldo Projetado", formatBRL(result.posProjected)],
-          ["Impacto Estimado", formatBRL(result.posImpact)],
+          ["Saldo Financiado (no Habite-se)", formatBRL(result.posBase)],
+          ["Parcela Mensal Estimada (PMT)", formatBRL(result.posPmt)],
+          ["Número de Parcelas", `${result.finDiretoParcelas} parcelas mensais`],
+          ["Total Estimado", formatBRL(result.posTotalPago)],
+          ["Juros Estimados", formatBRL(result.posJurosTotal)],
+          ["Última Parcela Estimada", result.posFimLabel],
         ],
         theme: "grid",
         headStyles: { fillColor: [79, 70, 229], textColor: 255 },
@@ -1333,7 +1399,7 @@ function SimulatorContent() {
       doc.setFont("helvetica", "italic");
       doc.setTextColor(79, 70, 229);
       const posDisclaimerLines = doc.splitTextToSize(
-        "AVISO: Os valores de correção pós-habite-se apresentados acima são estimativas baseadas em médias históricas do índice indicado mais a taxa de juros informada. O resultado final dependerá dos índices efetivamente apurados após a emissão do habite-se e das condições contratuais. A correção durante as obras é sempre pelo INCC; esta projeção cobre apenas o período posterior à entrega. Consulte o contrato para as condições definitivas de reajuste.",
+        "AVISO: As parcelas acima são estimativas calculadas pelo sistema PRICE sobre o saldo no habite-se, usando a média histórica do índice indicado mais a taxa de juros informada. O resultado final dependerá dos índices efetivamente apurados após a entrega e das condições contratuais do financiamento direto. A correção durante as obras é sempre pelo INCC; esta projeção cobre apenas o período posterior à entrega. Consulte o contrato para as condições definitivas.",
         pageWidth - margin * 2
       );
       doc.text(posDisclaimerLines, margin, yPos);
@@ -1375,9 +1441,11 @@ function SimulatorContent() {
     doc.setFont("helvetica", "italic");
     doc.setTextColor(90, 90, 90);
     const correctionNoteLines = doc.splitTextToSize(
-      posMode !== "none" && posTotalRate > 0
-        ? "A correção durante as obras é sempre pelo INCC. A partir da emissão do habite-se, o saldo devedor passa a ser corrigido pelo índice contratado mais a taxa de juros mensal indicada acima, até a efetiva quitação. A estimativa de correção pós-habite-se apresentada neste PDF utiliza a média histórica do índice selecionada na simulação mais os juros contratados."
-        : "A correção durante as obras é sempre pelo INCC. A partir da emissão do habite-se, o saldo devedor passa a ser corrigido pelo índice contratado mais a taxa de juros mensal indicada acima, até a efetiva quitação.",
+      modoDireto
+        ? posEstimativaAtiva
+          ? "A correção durante as obras é sempre pelo INCC. A partir da emissão do habite-se, o saldo devedor passa a ser corrigido pelo índice contratado mais a taxa de juros mensal indicada acima, até a efetiva quitação. A estimativa das parcelas do financiamento direto com a construtora apresentada neste PDF utiliza o sistema PRICE sobre o saldo no habite-se, com a média histórica do índice selecionada na simulação mais os juros contratados."
+          : "A correção durante as obras é sempre pelo INCC. A partir da emissão do habite-se, o saldo devedor passa a ser corrigido pelo índice contratado mais a taxa de juros mensal indicada acima, até a efetiva quitação. Nesta simulação, nenhuma correção pós-entrega foi calculada — selecione uma média do índice no simulador para estimar as parcelas do financiamento direto."
+        : "A correção durante as obras é sempre pelo INCC. A partir da emissão do habite-se, o saldo devedor passa a ser corrigido pelo índice contratado mais a taxa de juros mensal indicada acima, até a efetiva quitação. IMPORTANTE: nesta simulação (financiamento bancário) NENHUMA correção pós-entrega foi calculada nos valores apresentados — a correção indicada acima ocorrerá conforme o contrato e poderá alterar o saldo devedor após a entrega.",
       pageWidth - margin * 2
     );
     doc.text(correctionNoteLines, margin, yPos);
@@ -1401,7 +1469,9 @@ function SimulatorContent() {
       config?.juros_pos_habitese
     );
     const notes = [
-      "O saldo devedor deverá ser quitado até o habite-se ou financiado com o banco de preferência.",
+      modoDireto
+        ? `O saldo devedor deverá ser quitado até o habite-se ou financiado diretamente com a construtora em ${result.finDiretoParcelas} parcelas mensais (sistema PRICE), conforme as condições contratuais.`
+        : "O saldo devedor deverá ser quitado até o habite-se ou financiado com o banco de preferência.",
       `Importante: Os saldos devedores de todas as parcelas serão corrigidos mensalmente pelo INCC (Índice Nacional de Custo da Construção) durante as obras, até o habite-se, e a partir da emissão do habite-se por ${posHabiteseLabel}.`,
       "Os valores, condições e disponibilidade apresentados podem sofrer alteração sem aviso prévio.",
       `Entrega prevista: ${deliveryLabel}.`,
@@ -1465,6 +1535,8 @@ function SimulatorContent() {
     posJuros,
     posTotalRate,
     posData.isFallback,
+    modoDireto,
+    posEstimativaAtiva,
     downPaymentDate,
     empreendimento,
     config,
@@ -1573,7 +1645,9 @@ function SimulatorContent() {
       description: "Financiamento",
       value: formatBRL(result.financingAmount),
       percent: result.financingPercent,
-      note: "Saldo para financiamento bancário",
+      note: modoDireto
+        ? `Financiamento direto com a construtora (${result.finDiretoParcelas} parcelas PRICE)`
+        : "Saldo para financiamento bancário",
       bold: false,
       isHighlight: false,
       isIncc: false,
@@ -1594,15 +1668,15 @@ function SimulatorContent() {
         isDecoracao: false,
       });
     }
-    if (posMode !== "none" && posTotalRate > 0 && result.posBase > 0) {
+    if (posEstimativaAtiva && result.posBase > 0) {
       rows.push({
-        description: "Financiamento pós-habite-se (estimativa)*",
-        value: formatBRL(result.posProjected),
+        description: "Financiamento construtora (estimativa PRICE)*",
+        value: formatBRL(result.posTotalPago),
         percent:
           result.finalPropertyValue > 0
-            ? (result.posProjected / result.finalPropertyValue) * 100
+            ? (result.posTotalPago / result.finalPropertyValue) * 100
             : 0,
-        note: `${posIndexLabel} + juros = ${formatPctBR(posTotalRate)}% a.m. (12 meses após a entrega)`,
+        note: `${result.finDiretoParcelas} parcelas de ${formatBRL(result.posPmt)} — ${posIndexLabel} + juros = ${formatPctBR(posTotalRate)}% a.m.`,
         bold: false,
         isHighlight: false,
         isIncc: false,
@@ -1640,6 +1714,8 @@ function SimulatorContent() {
     posMode,
     posTotalRate,
     posIndexLabel,
+    modoDireto,
+    posEstimativaAtiva,
     config,
     intermediateInstallments,
     decoracaoEnabled,
@@ -1713,7 +1789,7 @@ function SimulatorContent() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1">
         {/* Title */}
-        <div className="text-center mb-10">
+        <div className="text-center mb-6">
           <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
             Simulador de Fluxo de Pagamento
           </h2>
@@ -1721,6 +1797,74 @@ function SimulatorContent() {
             Preencha os dados abaixo e simule o plano de pagamento personalizado.
           </p>
         </div>
+
+        {/* Seletor de cenário pós-entrega (apenas quando o admin habilitou) */}
+        {finDiretoAvailable && (
+          <div className="mb-8 max-w-3xl mx-auto">
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-5">
+              <p className="text-center text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">
+                Como você quer pagar o saldo após a entrega?
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setModoFinanciamento("bancario")}
+                  className={`flex items-start gap-3 p-4 rounded-xl border-2 text-left transition-all ${
+                    !modoDireto
+                      ? "border-[#0D1B2A] bg-[#0D1B2A]/5 shadow-sm"
+                      : "border-slate-200 hover:border-slate-300"
+                  }`}
+                >
+                  <Landmark
+                    className={`w-5 h-5 mt-0.5 shrink-0 ${
+                      !modoDireto ? "text-[#0D1B2A]" : "text-slate-400"
+                    }`}
+                  />
+                  <span>
+                    <span
+                      className={`block text-sm font-bold ${
+                        !modoDireto ? "text-[#0D1B2A]" : "text-slate-600"
+                      }`}
+                    >
+                      Padrão — Financiamento bancário
+                    </span>
+                    <span className="block text-xs text-slate-500 mt-0.5">
+                      Saldo devedor financiado pelo banco de sua preferência.
+                    </span>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModoFinanciamento("direto")}
+                  className={`flex items-start gap-3 p-4 rounded-xl border-2 text-left transition-all ${
+                    modoDireto
+                      ? "border-indigo-600 bg-indigo-50 shadow-sm"
+                      : "border-slate-200 hover:border-slate-300"
+                  }`}
+                >
+                  <Building2
+                    className={`w-5 h-5 mt-0.5 shrink-0 ${
+                      modoDireto ? "text-indigo-600" : "text-slate-400"
+                    }`}
+                  />
+                  <span>
+                    <span
+                      className={`block text-sm font-bold ${
+                        modoDireto ? "text-indigo-700" : "text-slate-600"
+                      }`}
+                    >
+                      Financiamento direto com a construtora
+                    </span>
+                    <span className="block text-xs text-slate-500 mt-0.5">
+                      {clampFinDiretoParcelas(config?.fin_direto_parcelas)} parcelas
+                      mensais fixas (PRICE) após a entrega, direto com a construtora.
+                    </span>
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 lg:gap-8">
@@ -2465,7 +2609,10 @@ function SimulatorContent() {
                   ) : null}
                 </div>
 
-                {/* Correção Pós-Habite-se (índice configurado pelo administrador) */}
+                {/* Correção Pós-Habite-se — apenas no cenário de financiamento direto.
+                    No cenário padrão (bancário) a correção NÃO é calculada;
+                    o PDF apenas informa a existência dela. */}
+                {modoDireto ? (
                 <div className="space-y-3">
                   <button
                     type="button"
@@ -2493,8 +2640,8 @@ function SimulatorContent() {
                         Índice definido pelo administrador:{" "}
                         <strong>{posIndexLabel}</strong> + juros de{" "}
                         <strong>{formatJurosPosHabitese(config.juros_pos_habitese)}</strong>{" "}
-                        ao mês. Aplica-se ao saldo devedor após a entrega do
-                        imóvel (projeção de 12 meses após o habite-se).
+                        ao mês. Usado para estimar as {clampFinDiretoParcelas(config.fin_direto_parcelas)} parcelas
+                        mensais (PRICE) do financiamento direto com a construtora.
                       </p>
                       <label className="flex items-center gap-3 p-2 cursor-pointer hover:bg-slate-50 rounded-lg">
                         <input
@@ -2572,6 +2719,7 @@ function SimulatorContent() {
                     </div>
                   ) : null}
                 </div>
+                ) : null}
 
                 <button
                   onClick={clearAll}
@@ -2624,7 +2772,7 @@ function SimulatorContent() {
                 </div>
                 <div className="w-full h-2.5 rounded-full bg-white/10 overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all duration-500 ${result.captationPercent >= (config?.percentual_captacao || 25) ? "bg-emerald-400" : result.captationPercent >= (config?.percentual_captacao || 25) - 5 ? "bg-amber-400" : "bg-red-400"}`}
+                    className={`h-full rounded-full transition-all duration-500 ${result.captationPercent >= captacaoTarget ? "bg-emerald-400" : result.captationPercent >= captacaoTarget - 5 ? "bg-amber-400" : "bg-red-400"}`}
                     style={{
                       width: `${Math.min(result.captationPercent, 100)}%`,
                     }}
@@ -2653,20 +2801,20 @@ function SimulatorContent() {
                 </div>
               )}
 
-              {posMode !== "none" && posTotalRate > 0 && result.posBase > 0 && (
+              {posEstimativaAtiva && result.posBase > 0 && (
                 <div className="mt-4 p-3 rounded-xl bg-indigo-500/15 border border-indigo-500/25">
                   <p className="text-indigo-200 text-xs font-semibold uppercase tracking-wider mb-1">
-                    Correção Pós-Habite-se (12 meses)
+                    Financiamento Construtora (PRICE)
                   </p>
                   <p className="text-white text-sm font-medium">
-                    Saldo projetado:{" "}
+                    {result.finDiretoParcelas} parcelas de{" "}
                     <span className="font-bold text-indigo-200">
-                      {formatBRL(result.posProjected)}
+                      {formatBRL(result.posPmt)}
                     </span>
                   </p>
                   <p className="text-indigo-200/70 text-xs mt-0.5">
-                    +{formatBRL(result.posImpact)} ({result.posAccumPct.toFixed(2)}%{" "}
-                    em 12 meses) — {posIndexLabel} + juros
+                    Taxa estimada: {posIndexLabel} + juros = {formatPctBR(posTotalRate)}% a.m. —
+                    juros estimados {formatBRL(result.posJurosTotal)} até {result.posFimLabel}
                   </p>
                 </div>
               )}
@@ -2815,6 +2963,7 @@ function SimulatorContent() {
                       inccMode={inccMode}
                       posMode={posMode}
                       config={config}
+                      modoDireto={modoDireto}
                     />
                   </div>
                 )}
@@ -2878,6 +3027,7 @@ function ScheduleTable({
   inccMode,
   posMode,
   config,
+  modoDireto,
 }: {
   rows: InstallmentRow[];
   activeTab: TabKey;
@@ -2885,6 +3035,7 @@ function ScheduleTable({
   inccMode: string;
   posMode: string;
   config: SimuladorConfig;
+  modoDireto: boolean;
 }) {
   if (activeTab === "financiamento") {
     return (
@@ -2894,7 +3045,9 @@ function ScheduleTable({
             {formatBRL(result.financingAmount)}
           </p>
           <p className="text-sm text-slate-500 mt-1">
-            Saldo para financiamento bancário
+            {modoDireto
+              ? `Financiamento direto com a construtora (${result.finDiretoParcelas} parcelas após a entrega)`
+              : "Saldo para financiamento bancário"}
           </p>
         </div>
         {inccMode !== "none" && result.inccAccumulatedPercent > 0 && (
@@ -2907,20 +3060,24 @@ function ScheduleTable({
             </p>
           </div>
         )}
-        {posMode !== "none" && result.posTotalRate > 0 && result.posBase > 0 && (
+        {modoDireto && posMode !== "none" && result.posTotalRate > 0 && result.posBase > 0 && (
           <div className="p-4 rounded-xl bg-indigo-50 border border-indigo-200">
             <p className="font-bold text-indigo-900 text-xl">
-              {formatBRL(result.posProjected)}
+              {formatBRL(result.posPmt)}
+              <span className="text-sm font-semibold text-indigo-700">
+                {' '}/ mês
+              </span>
             </p>
             <p className="text-sm text-indigo-700 mt-1">
-              Estimativa pós-habite-se (+{result.posAccumPct.toFixed(2)}% em 12
-              meses)
+              Parcela mensal estimada — {result.finDiretoParcelas} parcelas fixas
+              (sistema PRICE)
             </p>
             <p className="text-xs text-indigo-600 mt-1">
               {posHabiteseIndexLabel(config.indice_pos_habitese)} + juros de{" "}
               {formatJurosPosHabitese(config.juros_pos_habitese)} ao mês ={" "}
-              {formatPctBR(result.posTotalRate)}% a.m. — saldo estimado em{" "}
-              {result.posDateLabel}
+              {formatPctBR(result.posTotalRate)}% a.m. — total estimado{" "}
+              {formatBRL(result.posTotalPago)} (juros {formatBRL(result.posJurosTotal)}){" "}
+              até {result.posFimLabel}
             </p>
           </div>
         )}

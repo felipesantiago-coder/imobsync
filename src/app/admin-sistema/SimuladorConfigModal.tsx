@@ -9,6 +9,10 @@ import {
   formatJurosPosHabitese,
   posHabiteseIndexLabel,
 } from "@/lib/pos-habitese";
+import {
+  clampCaptacaoPct,
+  clampFinDiretoParcelas,
+} from "@/lib/financiamento-direto";
 
 const MESES = [
   { value: 1, label: "Janeiro" }, { value: 2, label: "Fevereiro" }, { value: 3, label: "Março" },
@@ -39,6 +43,9 @@ interface SimuladorConfig {
   taxa_decoracao_parcelas: number | null;
   taxa_decoracao_inicio: string | null;
   taxa_decoracao_fim: string | null;
+  fin_direto_construtora: boolean;
+  fin_direto_parcelas: number;
+  fin_direto_captacao_pct: number;
 }
 
 interface SimuladorConfigModalProps {
@@ -87,6 +94,9 @@ export default function SimuladorConfigModal({
     taxa_decoracao_parcelas: null,
     taxa_decoracao_inicio: null,
     taxa_decoracao_fim: null,
+    fin_direto_construtora: false,
+    fin_direto_parcelas: 120,
+    fin_direto_captacao_pct: 40,
   });
 
   // Carregar config existente
@@ -130,6 +140,9 @@ export default function SimuladorConfigModal({
             taxa_decoracao_parcelas: null,
             taxa_decoracao_inicio: null,
             taxa_decoracao_fim: null,
+            fin_direto_construtora: false,
+            fin_direto_parcelas: 120,
+            fin_direto_captacao_pct: 40,
           });
           setExistingConfig(false);
         }
@@ -451,6 +464,63 @@ export default function SimuladorConfigModal({
                 <p className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 mt-3">
                   Após o habite-se: saldo devedor corrigido por <strong>{posHabiteseIndexLabel(form.indice_pos_habitese)} + juros de {formatJurosPosHabitese(form.juros_pos_habitese)} ao mês</strong>.
                 </p>
+              </div>
+
+              {/* Financiamento Direto com a Construtora (pós-obra) */}
+              <div>
+                <h3 className="text-sm font-bold text-gray-700 mb-3">Financiamento Direto com a Construtora (pós-obra)</h3>
+                <label className="flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all mb-3 border-gray-200 hover:border-gray-300">
+                  <input
+                    type="checkbox"
+                    checked={form.fin_direto_construtora}
+                    onChange={(e) => setField("fin_direto_construtora", e.target.checked)}
+                    className="w-4 h-4 rounded accent-[#0D1B2A]"
+                  />
+                  <div>
+                    <span className="text-sm font-semibold text-gray-800">Habilitar opção de financiamento direto</span>
+                    <p className="text-[10px] text-gray-400">
+                      O usuário poderá escolher entre o cenário padrão (financiamento bancário) e o financiamento direto com a construtora.
+                    </p>
+                  </div>
+                </label>
+
+                {form.fin_direto_construtora && (
+                  <div className="pl-7 border-l-2 border-gray-200 ml-2 space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Nº de parcelas após a entrega</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="360"
+                          value={form.fin_direto_parcelas}
+                          onChange={(e) => setField("fin_direto_parcelas", clampFinDiretoParcelas(e.target.value))}
+                          className="w-full px-3 py-2.5 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-[#0D1B2A]/20 focus:border-[#0D1B2A] outline-none"
+                          placeholder="Ex: 120"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Captação neste cenário (%)</label>
+                        <input
+                          type="number"
+                          step="0.5"
+                          min="0"
+                          max="100"
+                          value={form.fin_direto_captacao_pct}
+                          onChange={(e) => setField("fin_direto_captacao_pct", clampCaptacaoPct(e.target.value))}
+                          className="w-full px-3 py-2.5 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-[#0D1B2A]/20 focus:border-[#0D1B2A] outline-none"
+                          placeholder="Ex: 40"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                      Neste cenário, o saldo devedor após a entrega é financiado diretamente pela construtora em{" "}
+                      <strong>{form.fin_direto_parcelas} parcelas mensais fixas (sistema PRICE)</strong>, com taxa estimada pela média do{" "}
+                      <strong>{posHabiteseIndexLabel(form.indice_pos_habitese)} + juros de {formatJurosPosHabitese(form.juros_pos_habitese)} ao mês</strong>{" "}
+                      (escolhidos acima). A meta de captação durante as obras passa a ser {form.fin_direto_captacao_pct}%.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Taxa de Decoração */}

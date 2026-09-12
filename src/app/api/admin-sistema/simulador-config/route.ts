@@ -5,6 +5,10 @@ import {
   clampJurosPosHabitese,
   normalizePosHabiteseIndice,
 } from "@/lib/pos-habitese";
+import {
+  clampCaptacaoPct,
+  clampFinDiretoParcelas,
+} from "@/lib/financiamento-direto";
 
 export const dynamic = "force-dynamic";
 
@@ -73,6 +77,9 @@ export async function POST(request: NextRequest) {
       taxa_decoracao_parcelas,
       taxa_decoracao_inicio,
       taxa_decoracao_fim,
+      fin_direto_construtora,
+      fin_direto_parcelas,
+      fin_direto_captacao_pct,
     } = body;
 
     if (!empreendimento_id || !entrega_mes || !entrega_ano) {
@@ -127,6 +134,9 @@ export async function POST(request: NextRequest) {
       indice_pos_habitese: normalizePosHabiteseIndice(indice_pos_habitese),
       juros_pos_habitese: clampJurosPosHabitese(juros_pos_habitese),
       taxa_decoracao: !!taxa_decoracao,
+      fin_direto_construtora: !!fin_direto_construtora,
+      fin_direto_parcelas: clampFinDiretoParcelas(fin_direto_parcelas),
+      fin_direto_captacao_pct: clampCaptacaoPct(fin_direto_captacao_pct),
     };
 
     if (parcela_unica_data_habilitada && !parcela_unica_data) {
@@ -186,6 +196,7 @@ export async function PUT(request: NextRequest) {
       "parcela_unica_habilitada", "parcela_unica_data_habilitada", "parcela_unica_data",
       "indice_pos_habitese", "juros_pos_habitese", "taxa_decoracao",
       "taxa_decoracao_valor", "taxa_decoracao_parcelas", "taxa_decoracao_inicio", "taxa_decoracao_fim",
+      "fin_direto_construtora", "fin_direto_parcelas", "fin_direto_captacao_pct",
     ];
 
     for (const field of allowedFields) {
@@ -209,6 +220,9 @@ export async function PUT(request: NextRequest) {
     if (updateData.parcela_unica_data !== undefined) updateData.parcela_unica_data = updateData.parcela_unica_data ? String(updateData.parcela_unica_data) : null;
     if (updateData.indice_pos_habitese !== undefined) updateData.indice_pos_habitese = normalizePosHabiteseIndice(updateData.indice_pos_habitese);
     if (updateData.juros_pos_habitese !== undefined) updateData.juros_pos_habitese = clampJurosPosHabitese(updateData.juros_pos_habitese);
+    if (updateData.fin_direto_construtora !== undefined) updateData.fin_direto_construtora = !!updateData.fin_direto_construtora;
+    if (updateData.fin_direto_parcelas !== undefined) updateData.fin_direto_parcelas = clampFinDiretoParcelas(updateData.fin_direto_parcelas);
+    if (updateData.fin_direto_captacao_pct !== undefined) updateData.fin_direto_captacao_pct = clampCaptacaoPct(updateData.fin_direto_captacao_pct);
 
     // Habilitar a parcela exige data no mesmo request quando enviada vazia
     // (atualizações parciais sem o campo mantêm a data já salva).
