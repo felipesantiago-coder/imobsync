@@ -159,6 +159,9 @@ export default function AdminSistemaClient() {
     }
   }, []);
 
+  // Guarda de sessão: migrate-legacy no máximo 1x por montagem do painel
+  const hasMigrated = React.useRef(false);
+
   // ─── Fetch empreendimentos ─────────────────────────────────────────────────
   const fetchEmpreendimentos = useCallback(async () => {
     try {
@@ -166,14 +169,22 @@ export default function AdminSistemaClient() {
       const res = await fetch("/api/admin-sistema/empreendimentos");
       if (!res.ok) throw new Error("Erro ao buscar empreendimentos");
       const json = await res.json();
-      setEmpreendimentos(Array.isArray(json.empreendimentos) ? json.empreendimentos : []);
+      const list = Array.isArray(json.empreendimentos) ? json.empreendimentos : [];
+      setEmpreendimentos(list);
+      // Auto-migrate legacy é OPCIONAL: só dispara quando o banco está vazio
+      // (self-heal de ambiente novo). Em produção com dados, nunca é chamada —
+      // evita request inútil por sessão e ruído de 403 no console.
+      if (list.length === 0 && !hasMigrated.current) {
+        hasMigrated.current = true;
+        migrateLegacy();
+      }
     } catch (err) {
       console.error(err);
       addToast("error", "Erro ao carregar empreendimentos");
     } finally {
       setLoading(false);
     }
-  }, [addToast]);
+  }, [addToast, migrateLegacy]);
 
   // ─── Fetch assinaturas ──────────────────────────────────────────
   const fetchAssinaturas = useCallback(async () => {
@@ -379,15 +390,10 @@ export default function AdminSistemaClient() {
     });
   }, [supabase.auth]);
 
-  // Buscar dados imediatamente; migrar legacy em background sem bloquear
-  const hasMigrated = React.useRef(false);
+  // Buscar dados imediatamente; migrate-legacy dispara só se o banco vier vazio
   useEffect(() => {
     if (activeTab === "empreendimentos") {
       fetchEmpreendimentos();
-      if (!hasMigrated.current) {
-        hasMigrated.current = true;
-        migrateLegacy(); // fire-and-forget, não bloqueia o fetch
-      }
     } else if (activeTab === "assinaturas") {
       fetchAssinaturas();
       fetchPlanosAdmin();
