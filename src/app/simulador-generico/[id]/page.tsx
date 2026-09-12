@@ -31,7 +31,9 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
+  clampJurosPosHabitese,
   formatJurosPosHabitese,
+  normalizePosHabiteseIndice,
   posHabiteseFullLabel,
   posHabiteseIndexLabel,
 } from "@/lib/pos-habitese";
@@ -126,6 +128,16 @@ interface CalculationResult {
   inccCorrectionFactor: number;
   inccAccumulatedPercent: number;
   inccMode: string;
+  posMode: string;
+  posIndexRate: number;
+  posJuros: number;
+  posTotalRate: number;
+  posFactor12: number;
+  posBase: number;
+  posProjected: number;
+  posImpact: number;
+  posAccumPct: number;
+  posDateLabel: string;
   financingCorrected: number;
   mRemainingCorrected: number;
   sRemainingCorrected: number;
@@ -182,6 +194,10 @@ function formatDateBR(date: Date): string {
   const month = String(date.getUTCMonth() + 1).padStart(2, "0");
   const year = date.getUTCFullYear();
   return `${day}/${month}/${year}`;
+}
+
+function formatPctBR(value: number, decimals = 3): string {
+  return value.toFixed(decimals).replace(".", ",");
 }
 
 function getTodayISO(): string {
@@ -266,6 +282,19 @@ function SimulatorContent() {
     isFallback: false,
   });
 
+  // Índice pós-habite-se (IGPM/IPCA conforme escolha do administrador)
+  const [posMode, setPosMode] = useState<InccMode>("none");
+  const [posData, setPosData] = useState<InccData>({
+    avg180: 0,
+    avg12: 0,
+    avg6: 0,
+    lastUpdate: null,
+    totalMonths: 0,
+    loading: true,
+    error: null,
+    isFallback: false,
+  });
+
   // Fetch config
   useEffect(() => {
     async function fetchConfig() {
@@ -316,6 +345,42 @@ function SimulatorContent() {
     fetchIncc();
   }, []);
 
+  // Fetch do índice pós-habite-se (IGPM/IPCA conforme config do empreendimento)
+  useEffect(() => {
+    if (!config) return;
+    const indice = normalizePosHabiteseIndice(config.indice_pos_habitese);
+    let cancelled = false;
+    async function fetchPosIndex() {
+      try {
+        const res = await fetch(`/api/incc?indice=${indice}`);
+        if (!res.ok) throw new Error(`Erro ${res.status}`);
+        const data = await res.json();
+        if (cancelled) return;
+        setPosData({
+          avg180: data.avg180 || 0,
+          avg12: data.avg12 || 0,
+          avg6: data.avg6 || 0,
+          lastUpdate: data.lastUpdate || null,
+          totalMonths: data.totalMonths || 0,
+          loading: false,
+          error: null,
+          isFallback: data.fallback || false,
+        });
+      } catch {
+        if (cancelled) return;
+        setPosData((prev) => ({
+          ...prev,
+          loading: false,
+          error: "Erro ao buscar dados do índice",
+        }));
+      }
+    }
+    fetchPosIndex();
+    return () => {
+      cancelled = true;
+    };
+  }, [config]);
+
   const parseVal = (raw: string) => parseCurrencyToNumber(raw);
   const propertyValue = parseVal(propertyValueInput);
   const downPaymentManual = parseVal(downPaymentInput);
@@ -350,6 +415,20 @@ function SimulatorContent() {
     return 0;
   };
   const inccMonthlyRate = inccData.loading ? 0 : getInccMonthlyRate();
+
+  // Índice pós-habite-se: média do índice escolhido pelo administrador + juros
+  const posJuros = config ? clampJurosPosHabitese(config.juros_pos_habitese) : 1;
+  const getPosIndexRate = (): number => {
+    if (posMode === "180m") return posData.avg180;
+    if (posMode === "12m") return posData.avg12;
+    if (posMode === "6m") return posData.avg6;
+    return 0;
+  };
+  const posIndexRate = posData.loading ? 0 : getPosIndexRate();
+  const posTotalRate = posIndexRate > 0 ? posIndexRate + posJuros : 0;
+  const posIndexLabel = config
+    ? posHabiteseIndexLabel(config.indice_pos_habitese)
+    : "IGPM";
 
   // Derived config values
   const deliveryMonth = config?.entrega_mes || 11;
@@ -441,6 +520,16 @@ function SimulatorContent() {
         inccCorrectionFactor: 1,
         inccAccumulatedPercent: 0,
         inccMode,
+        posMode,
+        posIndexRate: 0,
+        posJuros: 0,
+        posTotalRate: 0,
+        posFactor12: 1,
+        posBase: 0,
+        posProjected: 0,
+        posImpact: 0,
+        posAccumPct: 0,
+        posDateLabel: "",
         financingCorrected: 0,
         mRemainingCorrected: 0,
         sRemainingCorrected: 0,
@@ -665,6 +754,18 @@ function SimulatorContent() {
         ? ((financingCorrected - financing) / financing) * 100
         : 0;
 
+    // Estimativa pós-habite-se: saldo no habite-se (corrigido pelo INCC quando
+    // a estimativa de obra está ativa) projetado por 12 meses pela média do
+    // índice escolhido pelo administrador + juros configurados.
+    const posFactor12 =
+      posTotalRate > 0 ? Math.pow(1 + posTotalRate / 100, 12) : 1;
+    const posInccActive = inccMode !== "none" && inccAccumulatedPercent > 0;
+    const posBase = posInccActive ? hBalanceCorrected : hBalance;
+    const posProjected = posBase * posFactor12;
+    const posImpact = posProjected - posBase;
+    const posAccumPct = posBase > 0 ? (posImpact / posBase) * 100 : 0;
+    const posDate = addMonthsToDate(dpDate, totalMonths + 1 + 12);
+
     return {
       finalPropertyValue,
       downPaymentValue,
@@ -709,6 +810,16 @@ function SimulatorContent() {
       inccCorrectionFactor,
       inccAccumulatedPercent,
       inccMode,
+      posMode,
+      posIndexRate,
+      posJuros,
+      posTotalRate,
+      posFactor12,
+      posBase,
+      posProjected,
+      posImpact,
+      posAccumPct,
+      posDateLabel: formatDateBR(posDate),
       financingCorrected,
       mRemainingCorrected,
       sRemainingCorrected,
@@ -737,6 +848,10 @@ function SimulatorContent() {
     finalPropertyValue,
     inccMonthlyRate,
     inccMode,
+    posMode,
+    posIndexRate,
+    posJuros,
+    posTotalRate,
     config,
     dpDate,
     paymentLimit,
@@ -817,6 +932,7 @@ function SimulatorContent() {
     setDownPaymentDate(getTodayISO());
     setShowResults(false);
     setInccMode("none");
+    setPosMode("none");
     setIntermediateInstallments([]);
     setExpandedOptional(new Set());
   };
@@ -1170,6 +1286,60 @@ function SimulatorContent() {
       yPos += disclaimerLines.length * 3.5 + 10;
     }
 
+    // ── Estimativa de Correção Pós-Habite-se (índice do admin + juros) ──
+    if (posMode !== "none" && posTotalRate > 0 && result.posBase > 0) {
+      if (yPos > 200) {
+        doc.addPage();
+        yPos = 20;
+      }
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
+      doc.text("Estimativa de Correção Pós-Habite-se", margin, yPos);
+      yPos += 10;
+      const posMetricLabel =
+        posMode === "180m"
+          ? `Média dos últimos 180 meses do ${posIndexLabel}`
+          : posMode === "12m"
+            ? `Média dos últimos 12 meses do ${posIndexLabel}`
+            : `Média dos últimos 6 meses do ${posIndexLabel}`;
+      const posSourceLabel = posData.isFallback
+        ? "Dados de referência (valores estimados)"
+        : "Banco Central do Brasil (SGS)";
+      autoTable(doc, {
+        startY: yPos,
+        head: [["Descrição", "Valor"]],
+        body: [
+          [
+            "Índice Aplicado",
+            `${posIndexLabel} + juros de ${formatJurosPosHabitese(config?.juros_pos_habitese)} ao mês`,
+          ],
+          [
+            "Taxa Mensal Estimada",
+            `${formatPctBR(posIndexRate)} (índice) + ${formatPctBR(posJuros)} (juros) = ${formatPctBR(posTotalRate)} ao mês`,
+          ],
+          ["Métrica Utilizada", posMetricLabel],
+          ["Fonte dos Dados", posSourceLabel],
+          ["Período de Projeção", "12 meses após o habite-se"],
+          ["Saldo no Habite-se", formatBRL(result.posBase)],
+          ["Saldo Projetado", formatBRL(result.posProjected)],
+          ["Impacto Estimado", formatBRL(result.posImpact)],
+        ],
+        theme: "grid",
+        headStyles: { fillColor: [79, 70, 229], textColor: 255 },
+        margin: { top: 10, left: margin, right: margin },
+      });
+      yPos = doc.lastAutoTable.finalY + 8;
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "italic");
+      doc.setTextColor(79, 70, 229);
+      const posDisclaimerLines = doc.splitTextToSize(
+        "AVISO: Os valores de correção pós-habite-se apresentados acima são estimativas baseadas em médias históricas do índice indicado mais a taxa de juros informada. O resultado final dependerá dos índices efetivamente apurados após a emissão do habite-se e das condições contratuais. A correção durante as obras é sempre pelo INCC; esta projeção cobre apenas o período posterior à entrega. Consulte o contrato para as condições definitivas de reajuste.",
+        pageWidth - margin * 2
+      );
+      doc.text(posDisclaimerLines, margin, yPos);
+      yPos += posDisclaimerLines.length * 3.5 + 10;
+    }
+
     // ── Correção do Saldo Devedor (última página, antes das Observações) ──
     if (yPos > 170) {
       doc.addPage();
@@ -1205,7 +1375,9 @@ function SimulatorContent() {
     doc.setFont("helvetica", "italic");
     doc.setTextColor(90, 90, 90);
     const correctionNoteLines = doc.splitTextToSize(
-      "A correção durante as obras é sempre pelo INCC. A partir da emissão do habite-se, o saldo devedor passa a ser corrigido pelo índice contratado mais a taxa de juros mensal indicada acima, até a efetiva quitação.",
+      posMode !== "none" && posTotalRate > 0
+        ? "A correção durante as obras é sempre pelo INCC. A partir da emissão do habite-se, o saldo devedor passa a ser corrigido pelo índice contratado mais a taxa de juros mensal indicada acima, até a efetiva quitação. A estimativa de correção pós-habite-se apresentada neste PDF utiliza a média histórica do índice selecionada na simulação mais os juros contratados."
+        : "A correção durante as obras é sempre pelo INCC. A partir da emissão do habite-se, o saldo devedor passa a ser corrigido pelo índice contratado mais a taxa de juros mensal indicada acima, até a efetiva quitação.",
       pageWidth - margin * 2
     );
     doc.text(correctionNoteLines, margin, yPos);
@@ -1288,6 +1460,11 @@ function SimulatorContent() {
     inccMode,
     inccMonthlyRate,
     inccData.isFallback,
+    posMode,
+    posIndexRate,
+    posJuros,
+    posTotalRate,
+    posData.isFallback,
     downPaymentDate,
     empreendimento,
     config,
@@ -1309,6 +1486,7 @@ function SimulatorContent() {
       isHighlight: boolean;
       isIncc: boolean;
       isDecoracao: boolean;
+      isPos?: boolean;
     }[] = [
       {
         description: "Sinal",
@@ -1416,6 +1594,22 @@ function SimulatorContent() {
         isDecoracao: false,
       });
     }
+    if (posMode !== "none" && posTotalRate > 0 && result.posBase > 0) {
+      rows.push({
+        description: "Financiamento pós-habite-se (estimativa)*",
+        value: formatBRL(result.posProjected),
+        percent:
+          result.finalPropertyValue > 0
+            ? (result.posProjected / result.finalPropertyValue) * 100
+            : 0,
+        note: `${posIndexLabel} + juros = ${formatPctBR(posTotalRate)}% a.m. (12 meses após a entrega)`,
+        bold: false,
+        isHighlight: false,
+        isIncc: false,
+        isDecoracao: false,
+        isPos: true,
+      });
+    }
     if (decoracaoEnabled && result.decoracaoPaid > 0) {
       rows.push({
         description: "Taxa de Decoração",
@@ -1443,6 +1637,9 @@ function SimulatorContent() {
     result,
     inccMode,
     inccMonthlyRate,
+    posMode,
+    posTotalRate,
+    posIndexLabel,
     config,
     intermediateInstallments,
     decoracaoEnabled,
@@ -2268,6 +2465,114 @@ function SimulatorContent() {
                   ) : null}
                 </div>
 
+                {/* Correção Pós-Habite-se (índice configurado pelo administrador) */}
+                <div className="space-y-3">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPosMode(posMode === "none" ? "12m" : "none")
+                    }
+                    className="flex items-center justify-between w-full p-4 rounded-xl border-2 border-slate-100 hover:border-indigo-300 transition-all bg-slate-50"
+                  >
+                    <div className="flex items-center gap-3">
+                      <TrendingUp className="w-5 h-5 text-indigo-600" />
+                      <span className="font-bold text-slate-700">
+                        Correção Pós-Habite-se
+                      </span>
+                    </div>
+                    <span
+                      className={`text-xs font-bold px-3 py-1 rounded-full ${posMode !== "none" ? "bg-indigo-100 text-indigo-700" : "bg-slate-200 text-slate-500"}`}
+                    >
+                      {posMode !== "none" ? "Ativada" : "Desativada"}
+                    </span>
+                  </button>
+
+                  {posMode !== "none" ? (
+                    <div className="mt-4 pl-2 space-y-3 border-l-2 border-slate-100 ml-4">
+                      <p className="text-xs text-slate-500">
+                        Índice definido pelo administrador:{" "}
+                        <strong>{posIndexLabel}</strong> + juros de{" "}
+                        <strong>{formatJurosPosHabitese(config.juros_pos_habitese)}</strong>{" "}
+                        ao mês. Aplica-se ao saldo devedor após a entrega do
+                        imóvel (projeção de 12 meses após o habite-se).
+                      </p>
+                      <label className="flex items-center gap-3 p-2 cursor-pointer hover:bg-slate-50 rounded-lg">
+                        <input
+                          type="radio"
+                          name="pos-indice"
+                          value="none"
+                          checked={false}
+                          onChange={() => setPosMode("none")}
+                          className="w-4 h-4 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span className="text-sm text-slate-600">
+                          Sem correção pós-entrega
+                        </span>
+                      </label>
+                      <label className="flex items-center gap-3 p-2 cursor-pointer hover:bg-slate-50 rounded-lg">
+                        <input
+                          type="radio"
+                          name="pos-indice"
+                          value="180m"
+                          checked={posMode === "180m"}
+                          onChange={() => setPosMode("180m")}
+                          className="w-4 h-4 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span className="text-sm text-slate-600">
+                          Média últimos 180 meses do {posIndexLabel}
+                          {posData.loading
+                            ? " (carregando...)"
+                            : ` (${formatPctBR(posData.avg180, 4)}% a.m. + juros de ${formatJurosPosHabitese(config.juros_pos_habitese)} = ${formatPctBR(posData.avg180 + posJuros, 4)}% a.m.)`}
+                        </span>
+                      </label>
+                      <label className="flex items-center gap-3 p-2 cursor-pointer hover:bg-slate-50 rounded-lg">
+                        <input
+                          type="radio"
+                          name="pos-indice"
+                          value="12m"
+                          checked={posMode === "12m"}
+                          onChange={() => setPosMode("12m")}
+                          className="w-4 h-4 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span className="text-sm text-slate-600">
+                          Média últimos 12 meses do {posIndexLabel}
+                          {posData.loading
+                            ? " (carregando...)"
+                            : ` (${formatPctBR(posData.avg12, 4)}% a.m. + juros de ${formatJurosPosHabitese(config.juros_pos_habitese)} = ${formatPctBR(posData.avg12 + posJuros, 4)}% a.m.)`}
+                        </span>
+                      </label>
+                      <label className="flex items-center gap-3 p-2 cursor-pointer hover:bg-slate-50 rounded-lg">
+                        <input
+                          type="radio"
+                          name="pos-indice"
+                          value="6m"
+                          checked={posMode === "6m"}
+                          onChange={() => setPosMode("6m")}
+                          className="w-4 h-4 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span className="text-sm text-slate-600">
+                          Média últimos 6 meses do {posIndexLabel}
+                          {posData.loading
+                            ? " (carregando...)"
+                            : ` (${formatPctBR(posData.avg6, 4)}% a.m. + juros de ${formatJurosPosHabitese(config.juros_pos_habitese)} = ${formatPctBR(posData.avg6 + posJuros, 4)}% a.m.)`}
+                        </span>
+                      </label>
+                      {posData.error ? (
+                        <p className="text-xs text-red-500 pl-8">
+                          Não foi possível carregar os dados do índice agora.
+                        </p>
+                      ) : posData.lastUpdate ? (
+                        <p className="text-xs text-slate-400 pl-8">
+                          Atualizado em {posData.lastUpdate} —{" "}
+                          {posData.isFallback
+                            ? "Referência"
+                            : "Banco Central do Brasil"}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+
                 <button
                   onClick={clearAll}
                   className="flex items-center justify-center gap-2 w-full py-3 rounded-xl border border-slate-200 text-slate-600 font-semibold text-sm hover:bg-slate-50 transition-all"
@@ -2347,6 +2652,24 @@ function SimulatorContent() {
                   </p>
                 </div>
               )}
+
+              {posMode !== "none" && posTotalRate > 0 && result.posBase > 0 && (
+                <div className="mt-4 p-3 rounded-xl bg-indigo-500/15 border border-indigo-500/25">
+                  <p className="text-indigo-200 text-xs font-semibold uppercase tracking-wider mb-1">
+                    Correção Pós-Habite-se (12 meses)
+                  </p>
+                  <p className="text-white text-sm font-medium">
+                    Saldo projetado:{" "}
+                    <span className="font-bold text-indigo-200">
+                      {formatBRL(result.posProjected)}
+                    </span>
+                  </p>
+                  <p className="text-indigo-200/70 text-xs mt-0.5">
+                    +{formatBRL(result.posImpact)} ({result.posAccumPct.toFixed(2)}%{" "}
+                    em 12 meses) — {posIndexLabel} + juros
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Results Card */}
@@ -2363,11 +2686,11 @@ function SimulatorContent() {
                   {resultRows.map((row, i) => (
                     <div
                       key={i}
-                      className={`rounded-xl p-4 border ${row.bold ? "bg-emerald-50 border-emerald-200" : row.isIncc ? "bg-amber-50 border-amber-200" : row.isDecoracao ? "bg-orange-50 border-orange-200" : "bg-slate-50 border-slate-100"}`}
+                      className={`rounded-xl p-4 border ${row.bold ? "bg-emerald-50 border-emerald-200" : row.isIncc ? "bg-amber-50 border-amber-200" : row.isPos ? "bg-indigo-50 border-indigo-200" : row.isDecoracao ? "bg-orange-50 border-orange-200" : "bg-slate-50 border-slate-100"}`}
                     >
                       <div className="flex items-center justify-between mb-1">
                         <span
-                          className={`font-medium text-sm ${row.bold ? "text-emerald-900" : row.isIncc ? "text-amber-900" : row.isDecoracao ? "text-orange-900" : "text-slate-700"}`}
+                          className={`font-medium text-sm ${row.bold ? "text-emerald-900" : row.isIncc ? "text-amber-900" : row.isPos ? "text-indigo-900" : row.isDecoracao ? "text-orange-900" : "text-slate-700"}`}
                         >
                           {row.description}
                         </span>
@@ -2382,13 +2705,13 @@ function SimulatorContent() {
                         )}
                       </div>
                       <span
-                        className={`text-lg font-bold block ${row.bold ? "text-emerald-900" : row.isIncc ? "text-amber-900" : row.isDecoracao ? "text-orange-900" : "text-slate-900"}`}
+                        className={`text-lg font-bold block ${row.bold ? "text-emerald-900" : row.isIncc ? "text-amber-900" : row.isPos ? "text-indigo-900" : row.isDecoracao ? "text-orange-900" : "text-slate-900"}`}
                       >
                         {row.value}
                       </span>
                       {row.note && (
                         <span
-                          className={`text-xs block mt-1 ${row.isIncc ? "text-amber-600" : row.isDecoracao ? "text-orange-600" : "text-slate-400"}`}
+                          className={`text-xs block mt-1 ${row.isIncc ? "text-amber-600" : row.isPos ? "text-indigo-600" : row.isDecoracao ? "text-orange-600" : "text-slate-400"}`}
                         >
                           {row.note}
                         </span>
@@ -2417,22 +2740,22 @@ function SimulatorContent() {
                       {resultRows.map((row, i) => (
                         <tr
                           key={i}
-                          className={row.bold ? "bg-emerald-50 border-t border-emerald-200" : row.isIncc ? "border-t border-amber-200 bg-amber-50" : row.isDecoracao ? "border-t border-orange-200 bg-orange-50" : "border-t border-slate-100"}
+                          className={row.bold ? "bg-emerald-50 border-t border-emerald-200" : row.isIncc ? "border-t border-amber-200 bg-amber-50" : row.isPos ? "border-t border-indigo-200 bg-indigo-50" : row.isDecoracao ? "border-t border-orange-200 bg-orange-50" : "border-t border-slate-100"}
                         >
                           <td
-                            className={`py-3 px-4 ${row.bold ? "font-bold text-emerald-900" : row.isIncc ? "font-medium text-amber-900" : row.isDecoracao ? "font-medium text-orange-900" : "font-medium text-slate-700"}`}
+                            className={`py-3 px-4 ${row.bold ? "font-bold text-emerald-900" : row.isIncc ? "font-medium text-amber-900" : row.isPos ? "font-medium text-indigo-900" : row.isDecoracao ? "font-medium text-orange-900" : "font-medium text-slate-700"}`}
                           >
                             {row.description}
                             {row.note && (
                               <span
-                                className={`block text-xs font-normal mt-0.5 ${row.isIncc ? "text-amber-600" : row.isDecoracao ? "text-orange-600" : "text-slate-400"}`}
+                                className={`block text-xs font-normal mt-0.5 ${row.isIncc ? "text-amber-600" : row.isPos ? "text-indigo-600" : row.isDecoracao ? "text-orange-600" : "text-slate-400"}`}
                               >
                                 {row.note}
                               </span>
                             )}
                           </td>
                           <td
-                            className={`py-3 px-4 text-right ${row.bold ? "font-bold text-emerald-900" : row.isIncc ? "font-bold text-amber-900" : row.isDecoracao ? "font-bold text-orange-900" : "font-semibold text-slate-900"}`}
+                            className={`py-3 px-4 text-right ${row.bold ? "font-bold text-emerald-900" : row.isIncc ? "font-bold text-amber-900" : row.isPos ? "font-bold text-indigo-900" : row.isDecoracao ? "font-bold text-orange-900" : "font-semibold text-slate-900"}`}
                           >
                             {row.value}
                           </td>
@@ -2490,6 +2813,7 @@ function SimulatorContent() {
                       activeTab={activeTab}
                       result={result}
                       inccMode={inccMode}
+                      posMode={posMode}
                       config={config}
                     />
                   </div>
@@ -2552,12 +2876,14 @@ function ScheduleTable({
   activeTab,
   result,
   inccMode,
+  posMode,
   config,
 }: {
   rows: InstallmentRow[];
   activeTab: TabKey;
   result: CalculationResult;
   inccMode: string;
+  posMode: string;
   config: SimuladorConfig;
 }) {
   if (activeTab === "financiamento") {
@@ -2578,6 +2904,23 @@ function ScheduleTable({
             </p>
             <p className="text-sm text-amber-700 mt-1">
               Estimativa INCC (+{result.inccAccumulatedPercent.toFixed(2)}%)
+            </p>
+          </div>
+        )}
+        {posMode !== "none" && result.posTotalRate > 0 && result.posBase > 0 && (
+          <div className="p-4 rounded-xl bg-indigo-50 border border-indigo-200">
+            <p className="font-bold text-indigo-900 text-xl">
+              {formatBRL(result.posProjected)}
+            </p>
+            <p className="text-sm text-indigo-700 mt-1">
+              Estimativa pós-habite-se (+{result.posAccumPct.toFixed(2)}% em 12
+              meses)
+            </p>
+            <p className="text-xs text-indigo-600 mt-1">
+              {posHabiteseIndexLabel(config.indice_pos_habitese)} + juros de{" "}
+              {formatJurosPosHabitese(config.juros_pos_habitese)} ao mês ={" "}
+              {formatPctBR(result.posTotalRate)}% a.m. — saldo estimado em{" "}
+              {result.posDateLabel}
             </p>
           </div>
         )}

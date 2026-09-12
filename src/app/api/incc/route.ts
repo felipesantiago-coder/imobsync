@@ -1,72 +1,51 @@
 import { NextResponse } from "next/server";
+import {
+  averageWithinBounds,
+  bacenUrl,
+  BACEN_SERIES,
+  calcAverages,
+  INDEX_FALLBACKS,
+  normalizeIndiceParam,
+  parseBacenValues,
+  SOURCE_BOUNDS,
+  type IndexResult,
+  type IndiceKey,
+} from "@/lib/indices";
 
-// ─── Fontes de dados INCC ───
-// O Bacen SGS NÃO disponibiliza INCC-M (variação mensal).
-// Série 192 = INCC-DI (Índice Nacional de Custo da Construção – Disponibilidade Interna)
-// Fonte: FGV IBRE | Período: jan/1990 até presente | Atualização mensal
-// INCC-DI acompanha de perto o INCC-M e é o único INCC disponível na API do Bacen.
-const BACEN_SERIES_DI = "192";
-const BACEN_BASE_URL = "https://api.bcb.gov.br/dados/serie/bcdata.sgs";
-
-// brasilindicadores.com.br publica INCC-M (FGV) via tabela HTML acessível por AJAX.
+// ─── Fontes de dados por índice ───
+// INCC: O Bacen SGS NÃO disponibiliza INCC-M (variação mensal).
+//   Fonte principal = brasilindicadores.com.br (INCC-M oficial FGV).
+//   Fallback = INCC-DI via Bacen SGS série 192 (acompanha de perto o INCC-M).
+// IGPM: Bacen SGS série 189 — IGP-M variação % mensal (FGV IBRE).
+// IPCA: Bacen SGS série 433 — IPCA variação % mensal (IBGE).
 const BRASIL_INDICADORES_URL =
   "https://brasilindicadores.com.br/incc-m?handler=HistoricoValoresIndicadorPartial";
 
-// ─── Cache ───
-interface InccResult {
-  avg180: number;
-  avg12: number;
-  avg6: number;
-  lastUpdate: string | null;
-  totalMonths: number;
-  values: { data: string; valor: number }[];
-  source: string;
-  indicator: string; // "INCC-M" ou "INCC-DI"
-  fallback?: boolean;
+// ─── Cache POR ÍNDICE ───
+interface CacheEntry {
+  data: IndexResult | null;
+  timestamp: number;
 }
-
-let cache: { data: InccResult | null; timestamp: number } = {
-  data: null,
-  timestamp: 0,
-};
 
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 horas
 
-// Shared in-flight promise (audit 6.3): cold-start concurrent requests
-// trigger a single pair of upstream fetches instead of one per request.
-let inFlight: Promise<InccResult> | null = null;
+const caches: Record<IndiceKey, CacheEntry> = {
+  incc: { data: null, timestamp: 0 },
+  igpm: { data: null, timestamp: 0 },
+  ipca: { data: null, timestamp: 0 },
+};
 
-function formatBacenDate(d: Date): string {
-  const dd = String(d.getDate()).padStart(2, "0");
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const yyyy = d.getFullYear();
-  return `${dd}/${mm}/${yyyy}`;
-}
+// Shared in-flight promises (audit 6.3): dedupe por índice.
+const inFlight: Record<IndiceKey, Promise<IndexResult> | null> = {
+  incc: null,
+  igpm: null,
+  ipca: null,
+};
 
-// ─── Helpers de cálculo ───
-function calcAverages(monthlyValues: number[]) {
-  if (monthlyValues.length === 0) return { avg180: 0, avg12: 0, avg6: 0 };
-
-  const last180 = monthlyValues.slice(-180);
-  const avg180 = last180.reduce((s, v) => s + v, 0) / last180.length;
-
-  const last12 = monthlyValues.slice(-12);
-  const avg12 = last12.reduce((s, v) => s + v, 0) / last12.length;
-
-  const last6 = monthlyValues.slice(-6);
-  const avg6 = last6.reduce((s, v) => s + v, 0) / last6.length;
-
-  return {
-    avg180: Math.round(avg180 * 10000) / 10000,
-    avg12: Math.round(avg12 * 10000) / 10000,
-    avg6: Math.round(avg6 * 10000) / 10000,
-  };
-}
-
-// ─── Fonte 1 (principal): INCC-M via brasilindicadores.com.br ───
+// ─── Fonte 1 do INCC (principal): INCC-M via brasilindicadores.com.br ───
 // Retorna os valores oficiais do INCC-M publicados pela FGV IBRE.
 // Estrutura: tabela HTML com linhas por ano e colunas por mês (jan..dez + acumulado).
-async function fetchINCCmFromBrasilIndicadores(): Promise<InccResult | null> {
+async function fetchINCCmFromBrasilIndicadores(): Promise<IndexResult | null> {
   try {
     const res = await fetch(BRASIL_INDICADORES_URL, {
       signal: AbortSignal.timeout(15000),
@@ -143,7 +122,9 @@ async function fetchINCCmFromBrasilIndicadores(): Promise<InccResult | null> {
 
     // Sanidade: média geral deve estar entre 0.1% e 2%
     const rawAvg = allValues.reduce((s, v) => s + v, 0) / allValues.length;
-    if (rawAvg < 0.1 || rawAvg > 2) return null;
+    if (!averageWithinBounds(rawAvg, SOURCE_BOUNDS.inccBrasilIndicadores.min, SOURCE_BOUNDS.inccBrasilIndicadores.max)) {
+      return null;
+    }
 
     const { avg180, avg12, avg6 } = calcAverages(allValues);
     const lastEntry = since2011[since2011.length - 1];
@@ -166,42 +147,52 @@ async function fetchINCCmFromBrasilIndicadores(): Promise<InccResult | null> {
   }
 }
 
-// ─── Fonte 2 (fallback): INCC-DI via Bacen SGS série 192 ───
-// INCC-DI é o único INCC disponível na API do Bacen.
-// Valores muito próximos ao INCC-M (diferença < 0.1 p.p. nas médias).
-async function fetchINCCdFromBacen(): Promise<InccResult | null> {
+// ─── Fonte genérica Bacen SGS (INCC-DI 192, IGP-M 189, IPCA 433) ───
+// Todas as séries são variação % mensal no mesmo formato JSON {data, valor}.
+async function fetchFromBacen(key: IndiceKey): Promise<IndexResult | null> {
   try {
-    const endDate = new Date();
-    const startDate = new Date();
-    startDate.setMonth(startDate.getMonth() - 200);
+    const series = BACEN_SERIES[key];
+    if (!series) return null;
 
-    const url = `${BACEN_BASE_URL}.${BACEN_SERIES_DI}/dados?formato=json&dataInicial=${formatBacenDate(startDate)}&dataFinal=${formatBacenDate(endDate)}`;
+    const url = bacenUrl(series);
 
     const res = await fetch(url, {
-      next: { revalidate: 3600 },
       signal: AbortSignal.timeout(15000),
     });
 
     if (!res.ok) return null;
 
-    const rawData: { data: string; valor: string }[] = await res.json();
-    if (!Array.isArray(rawData) || rawData.length === 0) return null;
-
-    const values = rawData
-      .map((item) => ({
-        data: item.data,
-        valor: parseFloat(item.valor),
-      }))
-      .filter((item) => !isNaN(item.valor) && item.valor !== null);
-
+    const values = parseBacenValues(await res.json());
     if (values.length < 12) return null;
 
-    // Sanidade: média do INCC-DI tipicamente entre 0.2% e 1.5%
+    const bounds =
+      key === "incc"
+        ? SOURCE_BOUNDS.inccBacen
+        : key === "igpm"
+          ? SOURCE_BOUNDS.igpmBacen
+          : SOURCE_BOUNDS.ipcaBacen;
+
+    // Sanidade: média geral dentro da faixa esperada do índice
     const allValues = values.map((v) => v.valor);
     const rawAvg = allValues.reduce((s, v) => s + v, 0) / allValues.length;
-    if (rawAvg < 0.1 || rawAvg > 3) return null;
+    if (!averageWithinBounds(rawAvg, bounds.min, bounds.max)) return null;
 
     const { avg180, avg12, avg6 } = calcAverages(allValues);
+
+    const meta: Record<IndiceKey, { indicator: string; source: string }> = {
+      incc: {
+        indicator: "INCC-DI",
+        source: "Bacen SGS série 192 — INCC-DI (FGV IBRE)",
+      },
+      igpm: {
+        indicator: "IGP-M",
+        source: "Bacen SGS série 189 — IGP-M (FGV IBRE)",
+      },
+      ipca: {
+        indicator: "IPCA",
+        source: "Bacen SGS série 433 — IPCA (IBGE)",
+      },
+    };
 
     return {
       avg180,
@@ -213,47 +204,32 @@ async function fetchINCCdFromBacen(): Promise<InccResult | null> {
         data: v.data,
         valor: Math.round(v.valor * 10000) / 10000,
       })),
-      source: "Bacen SGS série 192 — INCC-DI (FGV IBRE)",
-      indicator: "INCC-DI",
+      source: meta[key].source,
+      indicator: meta[key].indicator,
     };
   } catch {
     return null;
   }
 }
 
-// ─── Fallback com valores verificados (agosto/2026) ───
-function getFallback(): InccResult {
-  // Valores verificados em 19/05/2026:
-  // INCC-M (brasilindicadores/FGV): 12m=0.5092%, 180m=0.5570%
-  // INCC-DI (Bacen série 192):       12m=0.5158%, 180m=0.5577%
-  return {
-    avg180: 0.5570,
-    avg12: 0.5092,
-    avg6: 0.5092, // mesma referência do 12m quando não há dados suficientes
-    lastUpdate: null,
-    totalMonths: 0,
-    values: [],
-    fallback: true,
-    source: "Valores de referência INCC-M (FGV IBRE) — fontes indisponíveis",
-    indicator: "INCC-M",
-  };
-}
-
-// ─── Handler GET ───
-async function fetchFresh(): Promise<InccResult> {
-  // 1) Tentar INCC-M via brasilindicadores (fonte principal — dados oficiais FGV)
-  let result = await fetchINCCmFromBrasilIndicadores();
-
-  // 2) Fallback: INCC-DI via Bacen série 192 (API confiável do Banco Central)
-  if (!result) {
-    result = await fetchINCCdFromBacen();
+// ─── Handler interno por índice ───
+async function fetchFresh(key: IndiceKey): Promise<IndexResult> {
+  // 1) Fonte principal do índice
+  if (key === "incc") {
+    const result = await fetchINCCmFromBrasilIndicadores();
+    // 2) Fallback: INCC-DI via Bacen série 192 (API confiável do Banco Central)
+    if (result) return result;
+    const bacen = await fetchFromBacen("incc");
+    // 3) Último recurso: valores estáticos verificados manualmente
+    return bacen || INDEX_FALLBACKS.incc;
   }
 
-  // 3) Último recurso: valores estáticos verificados manualmente
-  return result || getFallback();
+  // igpm / ipca: Bacen é a fonte primária (série oficial), fallback estático
+  const bacen = await fetchFromBacen(key);
+  return bacen || INDEX_FALLBACKS[key];
 }
 
-function respond(data: InccResult): NextResponse {
+function respond(data: IndexResult): NextResponse {
   // Public, non-personalized data (audit 6.3): CDN may serve and revalidate.
   return NextResponse.json(data, {
     headers: {
@@ -262,28 +238,40 @@ function respond(data: InccResult): NextResponse {
   });
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const key = normalizeIndiceParam(searchParams.get("indice"));
+
+  if (!key) {
+    return NextResponse.json(
+      { error: "Parâmetro 'indice' inválido. Valores aceitos: incc, igpm, ipca." },
+      { status: 400 }
+    );
+  }
+
+  const cache = caches[key];
+
   // Cache quente dentro do TTL
   if (cache.data && Date.now() - cache.timestamp < CACHE_TTL_MS) {
     return respond(cache.data);
   }
 
-  // Deduplicar requests simultâneos em uma única busca upstream
-  if (!inFlight) {
-    inFlight = fetchFresh()
+  // Deduplicar requests simultâneos em uma única busca upstream (por índice)
+  if (!inFlight[key]) {
+    inFlight[key] = fetchFresh(key)
       .then((result) => {
         // Só sobrescreve o cache com dados REAIS; o fallback estático não
         // apaga o último dado válido (usado como stale-safe abaixo).
         if (!result.fallback) {
-          cache = { data: result, timestamp: Date.now() };
+          caches[key] = { data: result, timestamp: Date.now() };
         }
         return result;
       })
       .finally(() => {
-        inFlight = null;
+        inFlight[key] = null;
       });
   }
-  const result = await inFlight;
+  const result = await inFlight[key];
 
   // Stale-safe (audit 6.3): fontes falharam mas existe dado real vencido —
   // servir o dado obsoleto em vez do fallback estático.
