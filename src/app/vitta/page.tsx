@@ -45,16 +45,21 @@ export default async function VittaPage() {
   // API, o fallback para dados estáticos fica no cliente: se a query retorna
   // vazia (ou dá erro/acesso negado), initialUnits permanece null e o cliente
   // faz o fetch original — que aplica o fallback de vitta-data.
+  // PERF: a query roda EM PARALELO com o guard — a decisão de autorização
+  // segue sendo EXATAMENTE canReadUnits (fonte única, em sincronia com as
+  // APIs) e a RLS segue como barreira da query. Com acesso negado, o
+  // resultado fica em memória do servidor e NÃO vai ao cliente.
   let initialUnits: InitialUnitsRow[] | null = null;
-  if (await canReadUnits(user, profileRole)) {
-    const { data } = await supabase
+  const [canRead, unitsRes] = await Promise.all([
+    canReadUnits(user, profileRole),
+    supabase
       .from("vitta_units")
       .select("*")
       .order("andar_num", { ascending: true })
       .order("bloco", { ascending: true })
-      .order("unidade", { ascending: true });
-    if (data && data.length > 0) initialUnits = data;
-  }
+      .order("unidade", { ascending: true }),
+  ]);
+  if (canRead && unitsRes.data && unitsRes.data.length > 0) initialUnits = unitsRes.data;
 
   return <VittaDashboard isAdmin={isAdmin} isCoordinator={isCoordinator} initialUnits={initialUnits} />;
 }

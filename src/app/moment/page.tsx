@@ -41,18 +41,23 @@ export default async function MomentPage() {
   }
 
   // Dados iniciais server-side (audit P1.4): mesma autorização da API GET
-  // /api/moment-units (requireReadAccess) e a mesma query/ordenação. Se negado
-  // ou em erro, initialUnits permanece null e o cliente segue o fluxo original
-  // (fetch → API → mesmo resultado, inclusive fallback estático).
+  // /api/moment-units (requireReadAccess) e a mesma query/ordenação.
+  // PERF: a query roda EM PARALELO com o guard — a decisão de autorização
+  // segue sendo EXATAMENTE canReadUnits (fonte única, em sincronia com as
+  // APIs) e a RLS segue como barreira da query. Com acesso negado, o
+  // resultado fica em memória do servidor e NÃO vai ao cliente
+  // (initialUnits permanece null → cliente segue o fluxo original via API,
+  // mesmo resultado, inclusive fallback estático).
   let initialUnits: InitialUnitsRow[] | null = null;
-  if (await canReadUnits(user, profileRole)) {
-    const { data } = await supabase
+  const [canRead, unitsRes] = await Promise.all([
+    canReadUnits(user, profileRole),
+    supabase
       .from("moment_units")
       .select("*")
       .order("andar", { ascending: true })
-      .order("unidade", { ascending: true });
-    if (data) initialUnits = data;
-  }
+      .order("unidade", { ascending: true }),
+  ]);
+  if (canRead && unitsRes.data) initialUnits = unitsRes.data;
 
   return <MomentDashboard isAdmin={isAdmin} isCoordinator={isCoordinator} initialUnits={initialUnits} />;
 }
