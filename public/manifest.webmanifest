@@ -1,0 +1,41 @@
+{
+  "name": "ImobSync",
+  "short_name": "ImobSync",
+  "description": "Plataforma de gestão e sincronização de informações comerciais para empreendimentos na planta. Espelho de vendas, simulações e propostas em PDF.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f7f9fb",
+  "theme_color": "#f7f9fb",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/pwa-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/pwa-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/pwa-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/pwa-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
