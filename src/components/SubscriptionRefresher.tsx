@@ -2,6 +2,10 @@
 
 import { useEffect, useRef } from 'react';
 import { usePathname } from 'next/navigation';
+import {
+  markSubscriptionRefreshed,
+  wasSubscriptionRefreshedRecently,
+} from '@/lib/subscription-refresh-coordinator';
 
 /**
  * SubscriptionRefresher
@@ -41,6 +45,9 @@ export default function SubscriptionRefresher() {
 
     if (!hasSession) return;
 
+    // Dedupe cross-component: o login acabou de refreshar (cookie recém-gravado)
+    if (wasSubscriptionRefreshedRecently()) return;
+
     // Debounce: não repetir se o último refresh foi há menos de 30 segundos
     const now = Date.now();
     if (now - lastRefreshRef.current < 30_000) return;
@@ -49,6 +56,7 @@ export default function SubscriptionRefresher() {
     const refresh = async () => {
       try {
         await fetch('/api/subscription-refresh', { credentials: 'include' });
+        markSubscriptionRefreshed();
       } catch {
         // Silencioso — falha do refresh não deve impactar o usuário
       }

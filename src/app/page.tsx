@@ -15,6 +15,7 @@ import {
   Smartphone,
 } from "lucide-react";
 import { useTurnstile } from "@/components/TurnstileWidget";
+import { markSubscriptionRefreshed } from "@/lib/subscription-refresh-coordinator";
 
 const slides = [
   {
@@ -235,6 +236,9 @@ function LoginForm() {
             ? Promise.resolve('active' as string)
             : fetch('/api/subscription-refresh', { signal: AbortSignal.timeout(8000) })
                 .then(async (res) => {
+                  // Dedupe: o SubscriptionRefresher não repete o refresh
+                  // logo após o login (mesmo cookie acabou de ser gravado)
+                  markSubscriptionRefreshed();
                   if (res.ok) {
                     const d = await res.json();
                     return (d.status as string) || null;
