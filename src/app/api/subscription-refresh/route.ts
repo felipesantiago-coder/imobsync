@@ -65,14 +65,31 @@ export async function GET(request: globalThis.Request) {
       return response;
     }
 
-    // Verificar se é admin
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role, subscription_status')
-      .eq('id', user.id)
-      .maybeSingle();
+    // PERF: perfil e assinatura consultados em PARALELO (−1 round trip
+    // sequencial por chamada; este endpoint roda a cada navegação protegida).
+    // Semântica de erro preservada: ambas as queries usam maybeSingle e não
+    // lançam — erro → data null → mesmo fluxo de antes (profile null cai no
+    // fluxo por assinatura; assinatura null → 'none').
+    // Para admins a query de assinatura também roda (resultado descartado no
+    // early return) — custo de 1 query indexada vs. ganho no caminho comum.
+    const admin = createAdminClient();
+    const [profileRes, assinaturaRes] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('role, subscription_status')
+        .eq('id', user.id)
+        .maybeSingle(),
+      admin
+        .from('assinaturas')
+        .select('id, status, data_fim')
+        .eq('user_id', user.id)
+        .in('status', ['active', 'lifetime'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
 
-    const profileData = profile as Record<string, unknown> | null;
+    const profileData = profileRes.data as Record<string, unknown> | null;
     const isAdmin = profileData?.role === 'admin_sistema';
 
     if (isAdmin) {
@@ -92,15 +109,7 @@ export async function GET(request: globalThis.Request) {
     }
 
     // Verificar assinatura real no banco (incluindo data_fim)
-    const admin = createAdminClient();
-    const { data: assinatura } = await admin
-      .from('assinaturas')
-      .select('id, status, data_fim')
-      .eq('user_id', user.id)
-      .in('status', ['active', 'lifetime'])
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const assinatura = assinaturaRes.data;
 
     let realStatus = 'none';
 
