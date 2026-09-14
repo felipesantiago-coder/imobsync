@@ -9,6 +9,7 @@ import { describe, it, expect } from "vitest";
 import {
   parseBatchRequestBody,
   matchBatchTargets,
+  matchSingleTarget,
   BATCH_VALID_STATUSES,
   BATCH_MAX_UNITS,
   type BatchRow,
@@ -148,5 +149,53 @@ describe("matchBatchTargets", () => {
     const { matches, failures } = matchBatchTargets(numericRows, [{ unidade: "301" }]);
     expect(matches.size).toBe(1);
     expect(failures).toHaveLength(0);
+  });
+});
+
+describe("matchSingleTarget (PATCH individual sem .single() do PostgREST)", () => {
+  // Espelha o cenário real do bug: mesmo nº de unidade em blocos diferentes
+  const rows: BatchRow[] = [
+    { id: "u1", status: "disponivel", unidade: 101, bloco: "A" },
+    { id: "u2", status: "reservado", unidade: 101, bloco: "B" },
+    { id: "u3", status: "disponivel", unidade: 102, bloco: "A" },
+  ];
+
+  it("resolve linha única por unidade (caso normal)", () => {
+    const m = matchSingleTarget(rows, { unidade: 102 });
+    expect(m.ok).toBe(true);
+    if (m.ok) {
+      expect(m.row.id).toBe("u3");
+      expect(m.row.status).toBe("disponivel");
+    }
+  });
+
+  it("desambigua com bloco informado (unidade homônima entre blocos)", () => {
+    const m = matchSingleTarget(rows, { bloco: "B", unidade: 101 });
+    expect(m.ok).toBe(true);
+    if (m.ok) expect(m.row.id).toBe("u2");
+  });
+
+  it("reporta ambigua quando unidade repete e o cliente não informa bloco", () => {
+    const m = matchSingleTarget(rows, { unidade: 101 });
+    expect(m.ok).toBe(false);
+    if (!m.ok) expect(m.motivo).toBe("ambigua");
+  });
+
+  it("reporta nao_encontrada para unidade inexistente", () => {
+    const m = matchSingleTarget(rows, { unidade: 999 });
+    expect(m.ok).toBe(false);
+    if (!m.ok) expect(m.motivo).toBe("nao_encontrada");
+  });
+
+  it("reporta nao_encontrada quando o bloco informado não existe e a base tem múltiplas linhas", () => {
+    const m = matchSingleTarget(rows, { bloco: "Z", unidade: 101 });
+    expect(m.ok).toBe(false);
+    if (!m.ok) expect(m.motivo).toBe("nao_encontrada");
+  });
+
+  it("mantém a tolerância do lote: bloco divergente com base unitária assume a linha", () => {
+    const m = matchSingleTarget(rows, { bloco: "a", unidade: 102 });
+    expect(m.ok).toBe(true);
+    if (m.ok) expect(m.row.id).toBe("u3");
   });
 });

@@ -176,7 +176,9 @@ const UnitCard = memo(function UnitCard({
           method: "PATCH",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ unidade: unit.unidade, status: newStatus }),
+          // bloco desambigua unidades homônimas entre blocos no servidor
+          // (unicidade real: empreendimento_id + bloco + unidade)
+          body: JSON.stringify({ unidade: unit.unidade, bloco: unit.bloco || "", status: newStatus }),
         }
       );
       const data = await res.json();

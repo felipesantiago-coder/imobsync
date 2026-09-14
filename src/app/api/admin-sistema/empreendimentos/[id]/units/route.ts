@@ -3,6 +3,11 @@ import { createClient } from "@/lib/supabase/server";
 import { requireReadAccess } from "@/lib/api-auth";
 import { coordenadorHasAccess } from "@/lib/coordinator-access";
 import { trackUnitStatusChange } from "@/lib/analytics";
+import {
+  matchSingleTarget,
+  type BatchRow,
+  type BatchUnitIdentifier,
+} from "@/lib/batch-units";
 
 export const dynamic = "force-dynamic";
 
@@ -83,10 +88,14 @@ export async function PATCH(
       }
     }
     const body = await request.json();
-    const { unidade, status } = body;
+    const { unidade, bloco, status } = body;
 
     if (!unidade || !status) {
       return NextResponse.json({ error: "Campos 'unidade' e 'status' são obrigatórios" }, { status: 400 });
+    }
+
+    if (typeof unidade !== "string" && typeof unidade !== "number") {
+      return NextResponse.json({ error: "Campo 'unidade' deve ser string ou número" }, { status: 400 });
     }
 
     const validStatuses = ["disponivel", "reservado", "vendido"];
@@ -105,25 +114,75 @@ export async function PATCH(
       return NextResponse.json({ error: "Empreendimento não encontrado" }, { status: 404 });
     }
 
-    // Fetch old unit data before update
-    const { data: oldUnit } = await supabase
+    // FIX: a unicidade real de projeto_units é (empreendimento_id, bloco,
+    // unidade) — números de unidade se repetem entre blocos. Atualizar por
+    // (empreendimento_id, unidade) fechando com .single() fazia o PostgREST
+    // falhar com PGRST116 ("Cannot coerce the result to a single JSON
+    // object") quando o empreendimento possui unidades homônimas em blocos
+    // diferentes — e o UPDATE podia aplicar o status às 2 linhas gêmeas
+    // antes do erro (500 que o coordenador via como "Erro ao atualizar
+    // unidade").
+    //
+    // Padrão novo (mesmo do PATCH em lote — batch-units.ts):
+    //   1. SELECT resolve as linhas candidatas (sem .single());
+    //   2. casamento exato identificador → linha (matchSingleTarget, com a
+    //      tolerância de formatação de bloco já documentada no lote);
+    //   3. UPDATE por id (chave primária) com escopo do empreendimento e
+    //      .maybeSingle() — imune a duplicatas e a deleção concorrente.
+    const { data: candidates, error: resolveErr } = await supabase
       .from("projeto_units")
-      .select("id, status, bloco, empreendimento_id")
+      .select("id, status, unidade, bloco")
       .eq("empreendimento_id", id)
-      .eq("unidade", unidade)
-      .single();
+      .eq("unidade", unidade);
+
+    if (resolveErr) {
+      console.error("Erro ao localizar unidade:", resolveErr.message);
+      return NextResponse.json({ error: "Erro ao localizar unidade" }, { status: 500 });
+    }
+
+    const ident: BatchUnitIdentifier = { unidade };
+    if ((typeof bloco === "string" && bloco !== "") || typeof bloco === "number") {
+      ident.bloco = bloco;
+    }
+    const match = matchSingleTarget(
+      ((candidates ?? []) as unknown) as BatchRow[],
+      ident
+    );
+
+    if (!match.ok) {
+      if (match.motivo === "ambigua") {
+        const total = (candidates ?? []).length;
+        console.error(
+          `PATCH units: unidade ambígua (${total} ocorrências de "${unidade}" em blocos diferentes) no empreendimento ${id}`
+        );
+        return NextResponse.json(
+          {
+            error: `Unidade ambígua: existem ${total} unidades com o número "${unidade}" em blocos diferentes. Recarregue a página e tente novamente.`,
+          },
+          { status: 409 }
+        );
+      }
+      return NextResponse.json({ error: "Unidade não encontrada" }, { status: 404 });
+    }
+
+    const target = match.row;
 
     const { data, error: updateErr } = await supabase
       .from("projeto_units")
       .update({ status })
       .eq("empreendimento_id", id)
-      .eq("unidade", unidade)
+      .eq("id", String(target.id))
       .select()
-      .single();
+      .maybeSingle();
 
     if (updateErr) {
       console.error("Erro ao atualizar status:", updateErr.message);
       return NextResponse.json({ error: "Erro ao atualizar unidade" }, { status: 500 });
+    }
+
+    // Linha removida entre o resolve e o update (corrida rara) → sem dado.
+    if (!data) {
+      return NextResponse.json({ error: "Unidade não encontrada" }, { status: 404 });
     }
 
     // Track status change (aguardado: histórico essencial deve completar
@@ -134,7 +193,7 @@ export async function PATCH(
         empreendimentoId: id,
         unidade: String(unidade),
         bloco: data.bloco || "",
-        statusAnterior: oldUnit?.status ?? null,
+        statusAnterior: (target.status as string) ?? null,
         statusNovo: status,
         changedBy: user.id,
         changedByRole: role || "unknown",

@@ -185,6 +185,32 @@ export function matchBatchTargets(
   return { matches, failures };
 }
 
+export type SingleTargetMatch =
+  | { ok: true; row: BatchRow }
+  | { ok: false; motivo: BatchFailureMotivo };
+
+/**
+ * Casamento identificador → linha para a atualização INDIVIDUAL (rota PATCH
+ * /units) — substitui o `.select().single()` do PostgREST, que falhava com
+ * PGRST116 ("Cannot coerce the result to a single JSON object") quando o
+ * empreendimento possui unidades homônimas em blocos diferentes (a unicidade
+ * real da tabela é (empreendimento_id, bloco, unidade)).
+ *
+ * Reusa exatamente a semântica do lote (matchBatchTargets): 1 casamento exato;
+ * 0 = nao_encontrada; >1 = ambigua; tolerância de formatação de bloco incluída.
+ * O chamador converte o motivo em resposta HTTP (404/409) — nunca 500 por
+ * coerção de resultado.
+ */
+export function matchSingleTarget(
+  rows: BatchRow[],
+  ident: BatchUnitIdentifier
+): SingleTargetMatch {
+  const { matches, failures } = matchBatchTargets(rows, [ident]);
+  const row = matches.get(0);
+  if (row) return { ok: true, row };
+  return { ok: false, motivo: failures[0]?.motivo ?? "nao_encontrada" };
+}
+
 /**
  * Mesmos guards do PATCH individual, executados uma vez para o lote inteiro.
  * - Sem `empreendimentoId`: admin_sistema sempre; coordenador precisa de ao
