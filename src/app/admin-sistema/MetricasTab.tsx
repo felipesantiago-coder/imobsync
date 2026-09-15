@@ -82,8 +82,12 @@ export default function MetricasTab({ addToast }: MetricasTabProps) {
   const maxDaily = data ? Math.max(...data.daily.map((d) => d.count), 1) : 1;
   const totalByType = data ? data.byType.reduce((s, t) => s + t.count, 0) : 0;
 
+  // created_at chega do PostgREST como ISO 8601 COM offset ("...+00:00"):
+  // parse direto (convenção do app). NÃO concatenar "Z" — timestamps já
+  // timezone-aware viram "...+00:00Z" → Invalid Date.
   const formatDate = (iso: string) => {
-    const d = new Date(iso + "Z");
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "—";
     return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
   };
 
