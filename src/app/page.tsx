@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useTurnstile } from "@/components/TurnstileWidget";
 import { markSubscriptionRefreshed } from "@/lib/subscription-refresh-coordinator";
+import { resolveLoginRoute, type PostLoginInfo } from "@/lib/post-login";
 
 const slides = [
   {
@@ -157,61 +158,69 @@ function LoginForm() {
         return;
       }
 
-      // Verificacao de admin via role do perfil (sem email hardcoded no bundle)
-      // O trigger handle_new_user cria o perfil antes do primeiro login.
+      // ── Pós-login consolidado (auditoria login-latency) ──────────────────
+      // Caminho feliz: 1 POST server-side resolve perfil + MFA (totp/passkeys)
+      // + assinatura em PARALELO e grava o cookie subscription_status —
+      // substitui 3-4 RTTs client seriais por 1. Qualquer falha (rede/função
+      // fria) cai no fluxo legado abaixo, sem mudança de comportamento.
 
       try {
         const supabase = createClient();
 
-        let profile: Record<string, unknown> | null = null;
+        let info: PostLoginInfo | null = null;
 
-        // Query única: traz tudo necessário para decisão de roteamento
-        const { data: pFull, error: errFull } = await supabase
-          .from("profiles")
-          .select("role, mfa_enabled, must_change_password, must_setup_mfa, subscription_status")
-          .eq("id", data.user.id)
-          .maybeSingle();
-
-        if (!errFull && pFull) {
-          profile = pFull as Record<string, unknown> | null;
-        } else {
-          const { data: pBase, error: errBase } = await supabase
-            .from("profiles")
-            .select("role, subscription_status")
-            .eq("id", data.user.id)
-            .maybeSingle();
-          if (!errBase) profile = pBase as Record<string, unknown> | null;
+        try {
+          const res = await fetch('/api/auth/post-login', {
+            method: 'POST',
+            signal: AbortSignal.timeout(8000),
+          });
+          if (res.ok) {
+            const d = await res.json();
+            if (d?.authenticated) {
+              info = {
+                authenticated: true,
+                role: (d.role as string) ?? null,
+                mfaEnabled: !!d.mfaEnabled,
+                mustChangePassword: !!d.mustChangePassword,
+                mustSetupMfa: !!d.mustSetupMfa,
+                subscriptionStatus: (d.subscriptionStatus as string) || 'none',
+              };
+              // Cookie subscription_status recém-gravado server-side —
+              // dedupe do SubscriptionRefresher (mesmo contrato do refresh)
+              markSubscriptionRefreshed();
+            }
+          }
+        } catch {
+          // timeout/rede — segue no fluxo legado
         }
 
-        const isAdmin = profile?.role === "admin_sistema";
+        if (!info) {
+          // ── Fluxo legado (fallback): queries client-side ────────────────
+          let profile: Record<string, unknown> | null = null;
 
-          if (profile?.must_change_password) {
-            // Cookie HttpOnly via API — não usa document.cookie
-            fetch('/api/auth/set-routing-cookie', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ step: 'change_password' }),
-            }).catch(() => {});
-            router.push("/change-password");
-            router.refresh();
-            return;
+          // Query única: traz tudo necessário para decisão de roteamento
+          const { data: pFull, error: errFull } = await supabase
+            .from("profiles")
+            .select("role, mfa_enabled, must_change_password, must_setup_mfa, subscription_status")
+            .eq("id", data.user.id)
+            .maybeSingle();
+
+          if (!errFull && pFull) {
+            profile = pFull as Record<string, unknown> | null;
+          } else {
+            const { data: pBase, error: errBase } = await supabase
+              .from("profiles")
+              .select("role, subscription_status")
+              .eq("id", data.user.id)
+              .maybeSingle();
+            if (!errBase) profile = pBase as Record<string, unknown> | null;
           }
 
-          if (profile?.must_setup_mfa) {
-            fetch('/api/auth/set-routing-cookie', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ step: 'setup_mfa' }),
-            }).catch(() => {});
-            router.push("/mfa-onboarding");
-            router.refresh();
-            return;
-          }
+          const isAdminLegacy = profile?.role === "admin_sistema";
 
-          let hasMfa = profile?.mfa_enabled ?? false;
-          // isAdmin ja definido acima via role do perfil
+          let hasMfa = (profile?.mfa_enabled as boolean) ?? false;
 
-          // Executar verificação MFA e subscription em paralelo
+          // Verificação MFA e subscription em paralelo (legado)
           const mfaCheck = !hasMfa
             ? Promise.all([
                 supabase
@@ -232,7 +241,7 @@ function LoginForm() {
             : Promise.resolve(false);
 
           // subscription-refresh seta cookie HttpOnly via response header
-          const subCheck = isAdmin
+          const subCheck = isAdminLegacy
             ? Promise.resolve('active' as string)
             : fetch('/api/subscription-refresh', { signal: AbortSignal.timeout(8000) })
                 .then(async (res) => {
@@ -254,33 +263,64 @@ function LoginForm() {
           const [mfaResult, subStatus] = await Promise.all([mfaCheck, subCheck]);
           hasMfa = hasMfa || mfaResult;
 
-          const finalRedirect = isAdmin
-            ? "/admin-sistema"
-            : "/projetos";
+          info = {
+            authenticated: true,
+            role: (profile?.role as string) ?? null,
+            mfaEnabled: hasMfa,
+            mustChangePassword: !!profile?.must_change_password,
+            mustSetupMfa: !!profile?.must_setup_mfa,
+            subscriptionStatus:
+              subStatus || (profile?.subscription_status as string) || 'none',
+          };
+        }
 
-          if (
-            !isAdmin &&
-            subStatus === 'pending'
-          ) {
-            router.push("/aguardando-pagamento");
-            router.refresh();
-            return;
-          }
+        // ── Roteamento único (mesma precedência do fluxo original) ──────────
+        const route = resolveLoginRoute(info);
 
-          if (hasMfa) {
-            // Cookie HttpOnly setado via API
-            fetch('/api/mfa/require', { method: 'POST' }).catch(() => {});
-            router.push(`/mfa-verify?redirect=${encodeURIComponent(finalRedirect)}`);
-          } else {
-            router.push(finalRedirect);
-          }
-        } catch (err) {
-          console.error('[Login] Erro no pós-login:', err);
-          setError("Erro ao processar login. Tente novamente.");
-          setLoading(false);
-          resetTurnstile();
+        if (route.kind === "change_password") {
+          // Cookie HttpOnly via API — não usa document.cookie
+          fetch('/api/auth/set-routing-cookie', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ step: 'change_password' }),
+          }).catch(() => {});
+          router.push(route.path);
+          router.refresh();
           return;
         }
+
+        if (route.kind === "setup_mfa") {
+          fetch('/api/auth/set-routing-cookie', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ step: 'setup_mfa' }),
+          }).catch(() => {});
+          router.push(route.path);
+          router.refresh();
+          return;
+        }
+
+        if (route.kind === "pending") {
+          router.push(route.path);
+          router.refresh();
+          return;
+        }
+
+        if (route.kind === "mfa_verify") {
+          // Cookie HttpOnly setado via API
+          fetch('/api/mfa/require', { method: 'POST' }).catch(() => {});
+          router.push(route.path);
+          return;
+        }
+
+        router.push(route.path);
+      } catch (err) {
+        console.error('[Login] Erro no pós-login:', err);
+        setError("Erro ao processar login. Tente novamente.");
+        setLoading(false);
+        resetTurnstile();
+        return;
+      }
     } catch (err) {
       console.error('[Login] Erro de conexão:', err);
       setError("Erro ao conectar com o servidor");
