@@ -10,13 +10,20 @@
  *
  * NUNCA interceptados (rede sempre):
  *  - métodos não-GET (mutações), requisições cross-origin (Supabase,
- *    Mercado Pago, Turnstile), /api/*, e requisições com Range (mídia).
+ *    Mercado Pago, Turnstile), /api/*, requisições com Range (mídia) e
+ *    payloads de navegação client-side do Next.js App Router (RSC /
+ *    Next-Router-* / Next-Action).
  *
  * Atualização do SW: nova versão no deploy → bump manual de VERSION abaixo
  * limpa caches antigos no activate. skipWaiting + clientsClaim = ativação
  * imediata (seguro aqui: caches de navegação não existem por design).
  */
-const VERSION = 'v1';
+// v2 (auditoria login-latency): v1 cacheava payload RSC de navegação client-
+// side sob a chave da rota (ex.: tela de login sob /projetos após redirect do
+// proxy) — o login seguinte recebia payload errado do cache e o Next caía em
+// navegação completa. v2 além de não interceptar RSC, PURGA os caches v1 já
+// envenenados nos navegadores dos usuários (activate remove versões antigas).
+const VERSION = 'v2';
 const SHELL_CACHE = `imobsync-shell-${VERSION}`;
 const ASSET_CACHE = `imobsync-assets-${VERSION}`;
 const OFFLINE_URL = '/offline';
@@ -34,7 +41,11 @@ function trimCache(cacheName, maxEntries) {
 }
 
 async function cacheInto(cacheName, request, response) {
-  if (response && response.ok) {
+  // redirected: resposta seguida por redirect NUNCA vai ao cache — o destino
+  // do redirect (ex.: tela de login após 307 do proxy) não é o recurso pedido.
+  // Defesa em profundidade; o guard RSC no fetch handler já isola os payloads
+  // de navegação do roteador.
+  if (response && response.ok && !response.redirected) {
     const cache = await caches.open(cacheName);
     await cache.put(request, response.clone());
     trimCache(cacheName, MAX_ASSET_ENTRIES);
@@ -77,6 +88,21 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return; // Supabase/MP/Turnstile: rede
   if (url.pathname.startsWith('/api/')) return; // APIs: rede
   if (request.headers.has('range')) return; // mídia por range: rede
+
+  // ── Next.js App Router: navegação client-side — NUNCA interceptar ─────────
+  // (auditoria login-latency): payloads RSC/prefetch respondidos por redirect
+  // (sessão/assinatura stale → 307 do proxy) tinham o DESTINO final cacheado
+  // sob a chave da rota ORIGINAL, com headers que casam com a navegação real
+  // do roteador — o próximo login recebia o payload errado em ms e o Next
+  // caía em navegação completa (reload lento). Também elimina o erro
+  // "The FetchEvent ... network error response" no console.
+  if (
+    request.headers.has('RSC') ||
+    request.headers.has('Next-Router-State-Tree') ||
+    request.headers.has('Next-Router-Prefetch') ||
+    request.headers.has('Next-Router-Segment-Prefetch') ||
+    request.headers.has('Next-Action')
+  ) return;
 
   // ── Navegação: network-first + fallback /offline ─────────────────────────
   if (request.mode === 'navigate') {
